@@ -1,10 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAgentChat } from "@workspace/api-client-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, TerminalSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Message = {
@@ -29,7 +25,7 @@ export default function Agent() {
     {
       id: "welcome",
       role: "agent",
-      content: "DST Agent Online. Ready for queries.",
+      content: "DST // SIGNAL ENGINE ONLINE",
     }
   ]);
   const [input, setInput] = useState("");
@@ -42,7 +38,7 @@ export default function Agent() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, chatMutation.isPending]);
 
   const handleSend = (text: string) => {
     if (!text.trim()) return;
@@ -80,7 +76,7 @@ export default function Agent() {
         const errorMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: "agent",
-          content: "SYSTEM ERROR: Failed to process query. Check connection."
+          content: "SYSTEM_ERROR: FAILED_TO_PROCESS_QUERY"
         };
         setMessages(prev => [...prev, errorMessage]);
       }
@@ -93,106 +89,87 @@ export default function Agent() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-6rem)] flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight mb-1 flex items-center gap-2">
-          <TerminalSquare className="w-6 h-6 text-primary" /> AGENT TERMINAL
-        </h1>
-        <p className="text-muted-foreground text-sm">Query the DST signal engine.</p>
+    <div className="h-[calc(100vh-6rem)] flex flex-col pb-6 max-w-6xl mx-auto">
+      <div className="pb-4 border-b border-border mb-6">
+        <h1 className="text-2xl font-display text-foreground mb-1 uppercase">AGENT TERMINAL</h1>
+        <p className="text-muted-foreground font-mono text-xs uppercase">NATURAL LANGUAGE INTERFACE TO THE DST SIGNAL ENGINE</p>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
-        {PREBUILT_COMMANDS.map(cmd => (
-          <Button 
-            key={cmd} 
-            variant="outline" 
-            size="sm" 
-            className="font-mono text-xs border-border bg-card hover:bg-accent"
-            onClick={() => handleSend(cmd)}
-            disabled={chatMutation.isPending}
-          >
-            &gt; {cmd}
-          </Button>
-        ))}
-      </div>
+      <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
+        {/* Command Shortcuts Sidebar */}
+        <div className="w-full md:w-48 shrink-0 flex flex-col gap-2">
+          <div className="text-[10px] font-mono text-muted-foreground uppercase mb-2">QUICK COMMANDS</div>
+          {PREBUILT_COMMANDS.map(cmd => (
+            <button 
+              key={cmd} 
+              className="text-left px-3 py-2 bg-transparent border border-border text-foreground font-mono text-xs hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+              onClick={() => handleSend(cmd)}
+              disabled={chatMutation.isPending}
+            >
+              &gt; {cmd}
+            </button>
+          ))}
+        </div>
 
-      <Card className="flex-1 flex flex-col border-border bg-card overflow-hidden">
-        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-          <div className="space-y-6">
-            {messages.map((msg) => (
-              <div 
-                key={msg.id} 
-                className={cn(
-                  "flex gap-3 max-w-[85%]",
-                  msg.role === "user" ? "ml-auto flex-row-reverse" : ""
-                )}
-              >
-                <div className={cn(
-                  "w-8 h-8 rounded-sm flex items-center justify-center shrink-0",
-                  msg.role === "agent" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
-                )}>
-                  {msg.role === "agent" ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
-                </div>
-                <div className={cn(
-                  "space-y-2",
-                  msg.role === "user" ? "text-right" : ""
-                )}>
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col border border-border bg-transparent min-w-0">
+          <ScrollArea className="flex-1 p-6" ref={scrollRef}>
+            <div className="space-y-6">
+              {messages.map((msg) => (
+                <div 
+                  key={msg.id} 
+                  className={cn(
+                    "flex flex-col max-w-[85%]",
+                    msg.role === "user" ? "ml-auto items-end" : "items-start"
+                  )}
+                >
                   <div className={cn(
-                    "px-4 py-3 rounded-sm inline-block text-sm",
-                    msg.role === "user" ? "bg-secondary text-secondary-foreground" : "bg-accent/50 text-foreground border border-border"
+                    "px-4 py-3 text-sm font-mono whitespace-pre-wrap",
+                    msg.role === "user" ? "bg-secondary border-r-2 border-primary text-foreground text-right" : "bg-card border-l-2 border-border text-body"
                   )}>
-                    {msg.content}
+                    {msg.id === "welcome" ? <span className="text-primary">{msg.content}</span> : msg.content}
                   </div>
                   
                   {msg.data && (
-                    <div className="mt-2 text-left">
-                      {msg.data.type === "signal" || msg.data.type === "audit" ? (
-                        <div className="bg-background border border-border rounded-sm p-3 font-mono text-xs overflow-x-auto whitespace-pre">
-                          {JSON.stringify(msg.data, null, 2)}
-                        </div>
-                      ) : (
-                        <div className="bg-background border border-border rounded-sm p-3 font-mono text-xs overflow-x-auto whitespace-pre text-muted-foreground">
-                          {JSON.stringify(msg.data, null, 2)}
-                        </div>
-                      )}
+                    <div className="mt-2 text-left w-full">
+                      <div className="bg-background border border-border p-4 font-mono text-xs overflow-x-auto whitespace-pre text-muted-foreground">
+                        {JSON.stringify(msg.data, null, 2)}
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
-            {chatMutation.isPending && (
-              <div className="flex gap-3 max-w-[85%]">
-                <div className="w-8 h-8 rounded-sm flex items-center justify-center shrink-0 bg-primary text-primary-foreground">
-                  <Bot className="w-5 h-5" />
+              ))}
+              {chatMutation.isPending && (
+                <div className="flex flex-col items-start max-w-[85%]">
+                  <div className="px-4 py-3 text-sm font-mono bg-card border-l-2 border-border text-body flex items-center gap-1">
+                    PROCESSING<span className="animate-pulse text-primary font-bold">|</span>
+                  </div>
                 </div>
-                <div className="px-4 py-3 rounded-sm inline-block text-sm bg-accent/50 text-muted-foreground border border-border font-mono">
-                  processing...
-                </div>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+              )}
+            </div>
+          </ScrollArea>
 
-        <div className="p-4 border-t border-border bg-background">
-          <form onSubmit={onSubmit} className="flex gap-2">
-            <Input 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Enter command..." 
-              className="font-mono bg-card border-border"
-              disabled={chatMutation.isPending}
-            />
-            <Button 
-              type="submit" 
-              disabled={!input.trim() || chatMutation.isPending}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 px-8"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              EXEC
-            </Button>
-          </form>
+          <div className="p-4 border-t border-border bg-card">
+            <form onSubmit={onSubmit} className="flex gap-2">
+              <input 
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="ENTER COMMAND..." 
+                className="flex-1 px-4 py-2 font-mono text-sm bg-card border border-border text-foreground focus:outline-none focus:border-primary placeholder:text-muted-foreground"
+                disabled={chatMutation.isPending}
+              />
+              <button 
+                type="submit" 
+                disabled={!input.trim() || chatMutation.isPending}
+                className="bg-primary text-sidebar font-mono text-sm font-bold px-8 hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                EXEC
+              </button>
+            </form>
+          </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }
