@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProcessVerdictBadge, SetupFamilyLabel } from "@/components/signal-process";
 
 function VerdictChip({ verdict }: { verdict: string }) {
   if (verdict === "PASS") return <span className="chip-pass"><span className="w-1.5 h-1.5 rounded-none bg-primary mr-1.5"></span>PASS</span>;
@@ -92,6 +93,17 @@ function AssetCard({ asset }: { asset: string }) {
                 style={{ width: `${signal.confidence}%` }}
               />
             </div>
+
+            <div className="flex justify-between items-center mt-3 pt-3 border-t border-border/50">
+              <div className="flex flex-col gap-1">
+                <ProcessVerdictBadge verdict={signal.processVerdict} />
+                <SetupFamilyLabel family={signal.setupFamily} />
+              </div>
+              {signal.rrRatio > 0 && (
+                <div className="font-mono text-xs text-foreground">R/R: {signal.rrRatio.toFixed(1)}x</div>
+              )}
+            </div>
+
           </div>
         </div>
       </CardContent>
@@ -127,6 +139,8 @@ export default function Dashboard() {
                 <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">DIR</th>
                 <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">CONF</th>
                 <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">DJZS</th>
+                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">PROCESS</th>
+                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">R/R</th>
                 <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">SUMMARY</th>
                 <th className="px-4 py-2 text-right font-mono font-medium text-xs uppercase">ACT</th>
               </tr>
@@ -140,6 +154,8 @@ export default function Dashboard() {
                     <td className="px-4 py-3"><Skeleton className="h-4 w-16 rounded-none bg-muted" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-10 rounded-none bg-muted" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-16 rounded-none bg-muted" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-16 rounded-none bg-muted" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-10 rounded-none bg-muted" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-48 rounded-none bg-muted" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-6 w-6 ml-auto rounded-none bg-muted" /></td>
                   </tr>
@@ -155,6 +171,14 @@ export default function Dashboard() {
                   </td>
                   <td className="px-4 py-3 font-mono">{entry.confidence}%</td>
                   <td className="px-4 py-3"><VerdictChip verdict={entry.verdict} /></td>
+                  <td className="px-4 py-3"><ProcessVerdictBadge verdict={entry.processVerdict} /></td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    {entry.rrRatio ? (
+                      <span className={cn(entry.rrRatio >= 2 ? "text-primary" : entry.rrRatio >= 1.5 ? "text-[hsl(var(--trade-wait))]" : "text-destructive")}>
+                        {entry.rrRatio.toFixed(1)}x
+                      </span>
+                    ) : "---"}
+                  </td>
                   <td className="px-4 py-3 text-body max-w-md truncate">{entry.summary}</td>
                   <td className="px-4 py-3 text-right">
                     <Link href={`/signal/${entry.asset}`} className="inline-flex items-center justify-center p-1 border border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors cursor-pointer">

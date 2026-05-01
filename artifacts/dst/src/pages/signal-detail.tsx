@@ -5,6 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { 
+  ProcessVerdictBadge, 
+  LogicAdmissibilityBadge, 
+  SetupFamilyLabel, 
+  EntryQualityBadge, 
+  NarrativeRiskBadge, 
+  RejectionCodeList, 
+  ProcessGradeBadge, 
+  RRRatioBadge, 
+  PreTradeChecklistPanel 
+} from "@/components/signal-process";
 
 function VerdictChip({ verdict }: { verdict: string }) {
   if (verdict === "PASS") return <span className="chip-pass"><span className="w-1.5 h-1.5 rounded-none bg-primary mr-1.5"></span>PASS</span>;
@@ -64,11 +75,21 @@ export default function SignalDetail() {
               {asset} SIGNAL
               <DirectionChip direction={signal.direction} />
               <VerdictChip verdict={signal.verdictDjzs} />
+              <ProcessVerdictBadge verdict={signal.processVerdict} />
             </h1>
           </div>
-          <p className="text-muted-foreground font-mono text-xs uppercase">
+          <div className="mb-2">
+            <SetupFamilyLabel family={signal.setupFamily} />
+          </div>
+          <div className="text-muted-foreground font-mono text-xs uppercase mb-3">
             COMPUTED: {new Date(signal.computedAt).toLocaleString()}
-          </p>
+          </div>
+          {signal.thesis && (
+            <div className="max-w-3xl mt-2">
+              <span className="text-xs font-mono uppercase text-muted-foreground mr-2">THESIS</span>
+              <span className="text-body italic">{signal.thesis}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center">
           <Link href={`/audit/${asset}`}>
@@ -81,6 +102,86 @@ export default function SignalDetail() {
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         
+        {/* PRE-TRADE CHECKLIST */}
+        <div className="md:col-span-12">
+          <Card className="border-border bg-card">
+            <CardHeader className="px-6 py-3 border-b border-border flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-mono text-muted-foreground uppercase">PRE-TRADE CHECKLIST</CardTitle>
+              {signal.preTradChecklist?.checklistComplete ? (
+                <span className="text-primary font-mono text-xs font-bold uppercase tracking-wider">COMPLETE</span>
+              ) : (
+                <span className="text-[hsl(var(--trade-wait))] font-mono text-xs font-bold uppercase tracking-wider">INCOMPLETE</span>
+              )}
+            </CardHeader>
+            <CardContent className="p-6">
+              <PreTradeChecklistPanel checklist={signal.preTradChecklist} />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* PROCESS VERDICT */}
+        <div className="md:col-span-12">
+          <Card className="border-border bg-card">
+            <CardHeader className="px-6 py-3 border-b border-border">
+              <CardTitle className="text-xs font-mono text-muted-foreground uppercase">PROCESS VERDICT</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <ProcessGradeBadge grade={signal.processQualityGrade} />
+                <div className="text-xl font-display font-bold">
+                  {signal.processVerdict}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                <LogicAdmissibilityBadge admissibility={signal.logicAdmissibility} />
+                <EntryQualityBadge quality={signal.entryQuality} />
+                <NarrativeRiskBadge risk={signal.narrativeRisk} />
+              </div>
+              <div>
+                <RRRatioBadge ratio={signal.rrRatio} />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* REJECTION CODES + REJECT CONDITIONS */}
+        {((signal.rejectionCodes && signal.rejectionCodes.length > 0) || (signal.rejectIf && signal.rejectIf.length > 0)) && (
+          <div className="md:col-span-12">
+            <Card className="border-border bg-card border-destructive/30">
+              <CardContent className="p-6 space-y-6">
+                {signal.rejectionCodes && signal.rejectionCodes.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-mono text-destructive/80 uppercase mb-3">REJECTION CODES</h3>
+                    <RejectionCodeList codes={signal.rejectionCodes} />
+                  </div>
+                )}
+                {signal.rejectIf && signal.rejectIf.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-mono text-muted-foreground uppercase mb-2">REJECT IF</h3>
+                    <ul className="list-disc pl-5 space-y-1 text-xs font-mono text-body">
+                      {signal.rejectIf.map((cond, i) => (
+                        <li key={i}>{cond}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* ASSESSMENT */}
+        <div className="md:col-span-12">
+          <Card className="border-border bg-card">
+            <CardHeader className="px-6 py-3 border-b border-border">
+              <CardTitle className="text-xs font-mono text-muted-foreground uppercase">ASSESSMENT</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <p className="text-body leading-relaxed">{signal.whyTrade}</p>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Main Signal Card */}
         <div className="md:col-span-8">
           <Card className="border-border bg-card h-full">
@@ -293,6 +394,21 @@ export default function SignalDetail() {
               ) : <div className="p-4 text-muted-foreground text-xs font-mono">No open interest data available</div>}
             </div>
           </div>
+        </div>
+
+        {/* OUTCOME TRACKING */}
+        <div className="md:col-span-12">
+          <Card className="border-border border-dashed bg-transparent mt-4 opacity-70">
+            <CardHeader className="px-6 py-3 border-b border-border border-dashed flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-mono text-muted-foreground uppercase">OUTCOME TRACKING</CardTitle>
+              <span className="chip-warn font-bold">SCAFFOLDED</span>
+            </CardHeader>
+            <CardContent className="p-6">
+              <p className="text-muted-foreground font-mono text-sm text-center">
+                Phase 2 / Outcome tracking is not yet live. Process quality is recorded independently of market outcome.
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
       </div>

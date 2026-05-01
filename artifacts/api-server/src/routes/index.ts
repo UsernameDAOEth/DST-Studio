@@ -6,6 +6,7 @@ import auditRouter from "./audit";
 import watchlistRouter from "./watchlist";
 import alertsRouter from "./alerts";
 import agentRouter from "./agent";
+import integrationsRouter from "./integrations";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use("/audit", auditRouter);
 router.use("/watchlist", watchlistRouter);
 router.use("/alerts", alertsRouter);
 router.use("/agent", agentRouter);
+router.use("/integrations", integrationsRouter);
 
 export default router;

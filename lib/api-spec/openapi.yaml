@@ -2,8 +2,8 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: DST Crypto Signal Assistant API
+  version: 0.2.0
+  description: DST Signal Engine — DJZS Audit Protocol
 servers:
   - url: /api
     description: Base API path
@@ -22,6 +22,8 @@ tags:
     description: Signal audit operations
   - name: agent
     description: Chat agent operations
+  - name: integrations
+    description: Integration scaffold and settings
 
 paths:
   /healthz:
@@ -272,6 +274,59 @@ paths:
                 items:
                   $ref: "#/components/schemas/SignalFeedEntry"
 
+  /integrations:
+    get:
+      operationId: getIntegrations
+      tags: [integrations]
+      summary: Get status of all integration scaffolds
+      responses:
+        "200":
+          description: List of integration statuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IntegrationStatus"
+
+  /integrations/{name}/toggle:
+    post:
+      operationId: toggleIntegration
+      tags: [integrations]
+      summary: Enable or disable an integration
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated integration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationStatus"
+
+  /integrations/{name}:
+    get:
+      operationId: getIntegrationByName
+      tags: [integrations]
+      summary: Get status of a specific integration
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Integration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationStatus"
+
 components:
   schemas:
     HealthStatus:
@@ -284,6 +339,10 @@ components:
 
     Signal:
       type: object
+      description: >
+        A disciplined pre-trade process report. Every signal includes a full
+        pre-trade checklist, process verdict, logic admissibility, and explicit
+        reject conditions. WAIT is the default when any required field is missing.
       properties:
         id:
           type: integer
@@ -294,12 +353,75 @@ components:
         direction:
           type: string
           enum: [LONG, SHORT, WAIT]
+          description: Raw directional signal from the market structure analysis
         confidence:
           type: number
           description: Confidence score 0-100
         verdictDjzs:
           type: string
           enum: [PASS, FAIL, WAIT]
+          description: DJZS logic admissibility audit verdict
+        processVerdict:
+          type: string
+          enum: [APPROVED, REJECTED, DEGRADED]
+          description: >
+            Pre-trade process verdict. APPROVED = all checklist items present and
+            valid. REJECTED = one or more hard rules violated. DEGRADED = setup
+            is valid but penalized (late entry, narrative risk, etc.).
+        logicAdmissibility:
+          type: string
+          enum: [ADMISSIBLE, INADMISSIBLE, CONDITIONAL]
+          description: >
+            Whether the signal passes structural logic rules. Separate from
+            market direction and from the DJZS audit verdict.
+        setupFamily:
+          type: string
+          enum: [TREND_CONTINUATION_LONG, TREND_CONTINUATION_SHORT, RANGE_LONG, RANGE_SHORT, NO_SETUP]
+          description: Classified setup type. Trend continuation is the primary family.
+        entryQuality:
+          type: string
+          enum: [OPTIMAL, ACCEPTABLE, LATE, INVALID]
+          description: Quality grade for the entry timing based on ATR extension and structure.
+        narrativeRisk:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+          description: >
+            Risk that the setup is driven by narrative rather than structure.
+            HIGH narrative risk penalizes or rejects the setup.
+        rrRatio:
+          type: number
+          description: Reward-to-risk ratio. Signals with rrRatio < 1.5 are rejected.
+        thesis:
+          type: string
+          description: One-sentence pre-trade thesis for this setup.
+        whyTrade:
+          type: string
+          description: >
+            Concise explanation of why this is or is not an actionable trade.
+            Always present, even for WAIT signals.
+        rejectIf:
+          type: array
+          items:
+            type: string
+          description: >
+            Explicit conditions that would invalidate this signal if triggered.
+            e.g. "Price closes below EMA50", "OI drops > 15% in 4H".
+        rejectionCodes:
+          type: array
+          items:
+            type: string
+          description: >
+            Machine-readable codes for why the setup was rejected or degraded.
+            Possible values: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID,
+            TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS,
+            CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD,
+            CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY.
+        processQualityGrade:
+          type: string
+          enum: [A, B, C, D, F]
+          description: >
+            Overall process quality grade. Reflects discipline of the setup
+            independent of market outcome.
         entryZoneLow:
           type: number
         entryZoneHigh:
@@ -312,6 +434,7 @@ components:
           type: array
           items:
             type: string
+          description: Positive signal reason codes
         computedAt:
           type: string
           format: date-time
@@ -322,6 +445,17 @@ components:
         - direction
         - confidence
         - verdictDjzs
+        - processVerdict
+        - logicAdmissibility
+        - setupFamily
+        - entryQuality
+        - narrativeRisk
+        - rrRatio
+        - thesis
+        - whyTrade
+        - rejectIf
+        - rejectionCodes
+        - processQualityGrade
         - reasonCodes
         - computedAt
 
@@ -338,6 +472,79 @@ components:
               $ref: "#/components/schemas/OIContext"
             auditReport:
               $ref: "#/components/schemas/AuditReport"
+            preTradChecklist:
+              $ref: "#/components/schemas/PreTradeChecklist"
+            outcomeTracking:
+              $ref: "#/components/schemas/OutcomeTracking"
+
+    PreTradeChecklist:
+      type: object
+      description: >
+        Structured pre-trade checklist that must be complete before a signal
+        can be APPROVED. Missing required fields force a WAIT output.
+      properties:
+        thesis:
+          type: string
+        regimeConfirmed:
+          type: boolean
+        entryZoneDefined:
+          type: boolean
+        invalidationDefined:
+          type: boolean
+        targetDefined:
+          type: boolean
+        reasonCodesPresent:
+          type: boolean
+        rejectConditionsDefined:
+          type: boolean
+        rrRatioAcceptable:
+          type: boolean
+        checklistComplete:
+          type: boolean
+        missingFields:
+          type: array
+          items:
+            type: string
+      required:
+        - thesis
+        - regimeConfirmed
+        - entryZoneDefined
+        - invalidationDefined
+        - targetDefined
+        - reasonCodesPresent
+        - rejectConditionsDefined
+        - rrRatioAcceptable
+        - checklistComplete
+        - missingFields
+
+    OutcomeTracking:
+      type: object
+      description: >
+        Scaffolded outcome tracking for process-vs-outcome separation.
+        All fields null until outcome tracking is enabled in a future phase.
+      properties:
+        scaffolded:
+          type: boolean
+          description: Always true — outcome tracking is not yet live
+        entryFilled:
+          type: boolean
+          nullable: true
+        exitPrice:
+          type: number
+          nullable: true
+        pnlPct:
+          type: number
+          nullable: true
+        outcome:
+          type: string
+          enum: [WIN, LOSS, BREAKEVEN, OPEN, PENDING]
+          nullable: true
+        processScore:
+          type: number
+          nullable: true
+          description: Process quality score independent of outcome
+      required:
+        - scaffolded
 
     MarketSnapshot:
       type: object
@@ -498,7 +705,7 @@ components:
           type: string
         condition:
           type: string
-          enum: [LONG_SIGNAL, SHORT_SIGNAL, PRICE_ABOVE, PRICE_BELOW, DJZS_PASS]
+          enum: [LONG_SIGNAL, SHORT_SIGNAL, PRICE_ABOVE, PRICE_BELOW, DJZS_PASS, PROCESS_APPROVED]
         threshold:
           type: number
         active:
@@ -523,7 +730,7 @@ components:
           type: string
         condition:
           type: string
-          enum: [LONG_SIGNAL, SHORT_SIGNAL, PRICE_ABOVE, PRICE_BELOW, DJZS_PASS]
+          enum: [LONG_SIGNAL, SHORT_SIGNAL, PRICE_ABOVE, PRICE_BELOW, DJZS_PASS, PROCESS_APPROVED]
         threshold:
           type: number
       required:
@@ -569,7 +776,15 @@ components:
         verdict:
           type: string
           enum: [PASS, FAIL, WAIT]
+        processVerdict:
+          type: string
+          enum: [APPROVED, REJECTED, DEGRADED]
+        setupFamily:
+          type: string
+          enum: [TREND_CONTINUATION_LONG, TREND_CONTINUATION_SHORT, RANGE_LONG, RANGE_SHORT, NO_SETUP]
         confidence:
+          type: number
+        rrRatio:
           type: number
         summary:
           type: string
@@ -581,6 +796,53 @@ components:
         - asset
         - direction
         - verdict
+        - processVerdict
+        - setupFamily
         - confidence
+        - rrRatio
         - summary
         - computedAt
+
+    IntegrationStatus:
+      type: object
+      description: >
+        Scaffold entry for a planned system integration.
+        All integrations are off by default until configured and enabled.
+      properties:
+        name:
+          type: string
+          description: Machine-readable integration name
+        displayName:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [SCHEDULER, PRICE_FEED, RESEARCH, ALERTS, ENRICHMENT]
+        enabled:
+          type: boolean
+        configured:
+          type: boolean
+          description: Whether required env vars / credentials are present
+        status:
+          type: string
+          enum: [ACTIVE, DISABLED, NOT_CONFIGURED, COMING_SOON]
+        envKeyRequired:
+          type: string
+          nullable: true
+          description: Name of the required environment variable
+        docsUrl:
+          type: string
+          nullable: true
+        phase:
+          type: string
+          description: Which expansion phase this integration belongs to (e.g. "Phase 2")
+      required:
+        - name
+        - displayName
+        - description
+        - category
+        - enabled
+        - configured
+        - status
+        - phase

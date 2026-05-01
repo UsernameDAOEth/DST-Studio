@@ -10,6 +10,7 @@ import Alerts from "@/pages/alerts";
 import Agent from "@/pages/agent";
 import SignalDetail from "@/pages/signal-detail";
 import Audit from "@/pages/audit";
+import Integrations from "@/pages/integrations";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ function Router() {
         <Route path="/watchlist" component={Watchlist} />
         <Route path="/alerts" component={Alerts} />
         <Route path="/agent" component={Agent} />
+        <Route path="/integrations" component={Integrations} />
         <Route path="/signal/:asset" component={SignalDetail} />
         <Route path="/audit/:asset" component={Audit} />
         <Route component={NotFound} />
