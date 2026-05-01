@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { seedDefaults } from "./lib/dst/seed";
 
 const app: Express = express();
 
@@ -30,5 +31,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+seedDefaults().catch((err) => logger.error({ err }, "Seed error"));
 
 export default app;

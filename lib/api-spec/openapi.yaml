@@ -3,20 +3,32 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: DST Crypto Signal Assistant API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: signals
+    description: Trading signal operations
+  - name: market
+    description: Market data operations
+  - name: watchlist
+    description: Watchlist management
+  - name: alerts
+    description: Alert management
+  - name: audit
+    description: Signal audit operations
+  - name: agent
+    description: Chat agent operations
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +36,242 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /signals:
+    get:
+      operationId: getSignals
+      tags: [signals]
+      summary: Get latest signals for all watched assets
+      parameters:
+        - name: asset
+          in: query
+          schema:
+            type: string
+          description: Filter by asset symbol (e.g. ETH, BTC, SOL)
+        - name: timeframe
+          in: query
+          schema:
+            type: string
+            enum: [1H, 4H, 1D]
+            default: 4H
+      responses:
+        "200":
+          description: List of signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Signal"
+
+  /signals/{asset}:
+    get:
+      operationId: getSignalByAsset
+      tags: [signals]
+      summary: Get the latest signal for a specific asset
+      parameters:
+        - name: asset
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Signal with full breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignalDetail"
+
+  /market/snapshot:
+    get:
+      operationId: getMarketSnapshot
+      tags: [market]
+      summary: Get market snapshot for all tracked assets
+      responses:
+        "200":
+          description: Market snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarketSnapshot"
+
+  /market/snapshot/{asset}:
+    get:
+      operationId: getMarketSnapshotByAsset
+      tags: [market]
+      summary: Get market snapshot for a specific asset
+      parameters:
+        - name: asset
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset market snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSnapshot"
+
+  /audit/{asset}:
+    get:
+      operationId: getAuditByAsset
+      tags: [audit]
+      summary: Get full DJZS audit breakdown for an asset
+      parameters:
+        - name: asset
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Full DJZS audit report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditReport"
+
+  /watchlist:
+    get:
+      operationId: getWatchlist
+      tags: [watchlist]
+      summary: Get all watchlist entries
+      responses:
+        "200":
+          description: Watchlist entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchlistEntry"
+
+    post:
+      operationId: addToWatchlist
+      tags: [watchlist]
+      summary: Add an asset to watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWatchlistEntry"
+      responses:
+        "201":
+          description: Created watchlist entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistEntry"
+
+  /watchlist/{id}:
+    delete:
+      operationId: removeFromWatchlist
+      tags: [watchlist]
+      summary: Remove an asset from watchlist
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  /alerts:
+    get:
+      operationId: getAlerts
+      tags: [alerts]
+      summary: Get all alerts
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+    post:
+      operationId: createAlert
+      tags: [alerts]
+      summary: Create an alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlert"
+      responses:
+        "201":
+          description: Created alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /alerts/{id}:
+    delete:
+      operationId: deleteAlert
+      tags: [alerts]
+      summary: Delete an alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /agent/chat:
+    post:
+      operationId: agentChat
+      tags: [agent]
+      summary: Send a command to the DST agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentChatRequest"
+      responses:
+        "200":
+          description: Agent response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentReply"
+
+  /signals/feed:
+    get:
+      operationId: getSignalFeed
+      tags: [signals]
+      summary: Get chronological signal feed for all assets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Signal feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SignalFeedEntry"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +282,305 @@ components:
       required:
         - status
 
+    Signal:
+      type: object
+      properties:
+        id:
+          type: integer
+        asset:
+          type: string
+        timeframe:
+          type: string
+        direction:
+          type: string
+          enum: [LONG, SHORT, WAIT]
+        confidence:
+          type: number
+          description: Confidence score 0-100
+        verdictDjzs:
+          type: string
+          enum: [PASS, FAIL, WAIT]
+        entryZoneLow:
+          type: number
+        entryZoneHigh:
+          type: number
+        targetZone:
+          type: number
+        invalidationPrice:
+          type: number
+        reasonCodes:
+          type: array
+          items:
+            type: string
+        computedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - asset
+        - timeframe
+        - direction
+        - confidence
+        - verdictDjzs
+        - reasonCodes
+        - computedAt
+
+    SignalDetail:
+      allOf:
+        - $ref: "#/components/schemas/Signal"
+        - type: object
+          properties:
+            marketSnapshot:
+              $ref: "#/components/schemas/MarketSnapshot"
+            trendRegime:
+              $ref: "#/components/schemas/TrendRegime"
+            openInterestContext:
+              $ref: "#/components/schemas/OIContext"
+            auditReport:
+              $ref: "#/components/schemas/AuditReport"
+
+    MarketSnapshot:
+      type: object
+      properties:
+        asset:
+          type: string
+        price:
+          type: number
+        priceChange24h:
+          type: number
+        priceChangePct24h:
+          type: number
+        volume24h:
+          type: number
+        marketCap:
+          type: number
+        totalValueLocked:
+          type: number
+        defiLlamaSlug:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - asset
+        - price
+        - priceChange24h
+        - priceChangePct24h
+        - updatedAt
+
+    TrendRegime:
+      type: object
+      properties:
+        asset:
+          type: string
+        regime:
+          type: string
+          enum: [BULL, BEAR, RANGING, UNDEFINED]
+        ema9:
+          type: number
+        ema21:
+          type: number
+        ema50:
+          type: number
+        rsi:
+          type: number
+        macdHistogram:
+          type: number
+        atr:
+          type: number
+        trendStrength:
+          type: number
+          description: 0-100
+      required:
+        - asset
+        - regime
+
+    OIContext:
+      type: object
+      properties:
+        asset:
+          type: string
+        openInterest:
+          type: number
+        oiChange24h:
+          type: number
+        oiChangePct24h:
+          type: number
+        fundingRate:
+          type: number
+        longShortRatio:
+          type: number
+        dominantSide:
+          type: string
+          enum: [LONG, SHORT, NEUTRAL]
+      required:
+        - asset
+        - dominantSide
+
+    AuditReport:
+      type: object
+      properties:
+        asset:
+          type: string
+        verdict:
+          type: string
+          enum: [PASS, FAIL, WAIT]
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditCheck"
+        summary:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+      required:
+        - asset
+        - verdict
+        - checks
+        - summary
+        - generatedAt
+
+    AuditCheck:
+      type: object
+      properties:
+        name:
+          type: string
+        result:
+          type: string
+          enum: [PASS, FAIL, WARN, SKIP]
+        detail:
+          type: string
+        weight:
+          type: number
+      required:
+        - name
+        - result
+        - detail
+        - weight
+
+    WatchlistEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        asset:
+          type: string
+        timeframe:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - asset
+        - timeframe
+        - addedAt
+
+    CreateWatchlistEntry:
+      type: object
+      properties:
+        asset:
+          type: string
+        timeframe:
+          type: string
+          enum: [1H, 4H, 1D]
+          default: 4H
+      required:
+        - asset
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        asset:
+          type: string
+        condition:
+          type: string
+          enum: [LONG_SIGNAL, SHORT_SIGNAL, PRICE_ABOVE, PRICE_BELOW, DJZS_PASS]
+        threshold:
+          type: number
+        active:
+          type: boolean
+        triggeredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - asset
+        - condition
+        - active
+        - createdAt
+
+    CreateAlert:
+      type: object
+      properties:
+        asset:
+          type: string
+        condition:
+          type: string
+          enum: [LONG_SIGNAL, SHORT_SIGNAL, PRICE_ABOVE, PRICE_BELOW, DJZS_PASS]
+        threshold:
+          type: number
+      required:
+        - asset
+        - condition
+
+    AgentChatRequest:
+      type: object
+      properties:
+        message:
+          type: string
+        sessionId:
+          type: string
+      required:
+        - message
+
+    AgentReply:
+      type: object
+      properties:
+        reply:
+          type: string
+        command:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+        sessionId:
+          type: string
+      required:
+        - reply
+        - sessionId
+
+    SignalFeedEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        asset:
+          type: string
+        direction:
+          type: string
+          enum: [LONG, SHORT, WAIT]
+        verdict:
+          type: string
+          enum: [PASS, FAIL, WAIT]
+        confidence:
+          type: number
+        summary:
+          type: string
+        computedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - asset
+        - direction
+        - verdict
+        - confidence
+        - summary
+        - computedAt

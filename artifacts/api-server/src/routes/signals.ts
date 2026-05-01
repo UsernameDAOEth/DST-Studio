@@ -1,0 +1,127 @@
+import { Router } from "express";
+import { db } from "@workspace/db";
+import { signalsTable } from "@workspace/db";
+import { desc, eq } from "drizzle-orm";
+import { computeSignal } from "../lib/dst/signalEngine";
+import {
+  GetSignalsQueryParams,
+  GetSignalByAssetParams,
+  GetSignalFeedQueryParams,
+} from "@workspace/api-zod";
+import { ASSET_MAP } from "../lib/dst/defillamaClient";
+
+const router = Router();
+
+async function getOrComputeSignal(asset: string) {
+  const recent = await db
+    .select()
+    .from(signalsTable)
+    .where(eq(signalsTable.asset, asset))
+    .orderBy(desc(signalsTable.computedAt))
+    .limit(1);
+
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  if (recent.length > 0 && new Date(recent[0].computedAt) > fiveMinutesAgo) {
+    return recent[0];
+  }
+
+  const signal = await computeSignal(asset);
+  const [inserted] = await db
+    .insert(signalsTable)
+    .values({
+      asset: signal.asset,
+      timeframe: signal.timeframe,
+      direction: signal.direction,
+      confidence: String(signal.confidence),
+      verdictDjzs: signal.verdictDjzs,
+      entryZoneLow: String(signal.entryZoneLow),
+      entryZoneHigh: String(signal.entryZoneHigh),
+      targetZone: String(signal.targetZone),
+      invalidationPrice: String(signal.invalidationPrice),
+      reasonCodes: signal.reasonCodes,
+      marketSnapshot: signal.marketSnapshot as Record<string, unknown>,
+      trendRegime: signal.trendRegime as Record<string, unknown>,
+      openInterestContext: signal.openInterestContext as Record<string, unknown>,
+      auditReport: signal.auditReport as Record<string, unknown>,
+    })
+    .returning();
+  return inserted;
+}
+
+function mapSignalRow(row: typeof signalsTable.$inferSelect) {
+  return {
+    id: row.id,
+    asset: row.asset,
+    timeframe: row.timeframe,
+    direction: row.direction,
+    confidence: Number(row.confidence),
+    verdictDjzs: row.verdictDjzs,
+    entryZoneLow: row.entryZoneLow ? Number(row.entryZoneLow) : undefined,
+    entryZoneHigh: row.entryZoneHigh ? Number(row.entryZoneHigh) : undefined,
+    targetZone: row.targetZone ? Number(row.targetZone) : undefined,
+    invalidationPrice: row.invalidationPrice ? Number(row.invalidationPrice) : undefined,
+    reasonCodes: row.reasonCodes ?? [],
+    computedAt: row.computedAt.toISOString(),
+  };
+}
+
+router.get("/", async (req, res) => {
+  const params = GetSignalsQueryParams.safeParse(req.query);
+  const asset = params.success ? params.data.asset : undefined;
+  const assets = asset ? [asset.toUpperCase()] : Object.keys(ASSET_MAP);
+
+  const rows = await Promise.all(assets.map(getOrComputeSignal));
+  res.json(rows.filter(Boolean).map(mapSignalRow));
+});
+
+router.get("/feed", async (req, res) => {
+  const params = GetSignalFeedQueryParams.safeParse(req.query);
+  const limit = params.success ? (params.data.limit ?? 20) : 20;
+
+  const rows = await db
+    .select()
+    .from(signalsTable)
+    .orderBy(desc(signalsTable.computedAt))
+    .limit(limit);
+
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      asset: r.asset,
+      direction: r.direction,
+      verdict: r.verdictDjzs,
+      confidence: Number(r.confidence),
+      summary: `${r.asset} ${r.direction} — DJZS ${r.verdictDjzs} — Confidence ${Number(r.confidence).toFixed(0)}%`,
+      computedAt: r.computedAt.toISOString(),
+    }))
+  );
+});
+
+router.get("/:asset", async (req, res) => {
+  const params = GetSignalByAssetParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: "Invalid asset" });
+    return;
+  }
+  const asset = params.data.asset.toUpperCase();
+  if (!ASSET_MAP[asset]) {
+    res.status(404).json({ error: `Unknown asset: ${asset}` });
+    return;
+  }
+
+  const row = await getOrComputeSignal(asset);
+  if (!row) {
+    res.status(500).json({ error: "Failed to compute signal" });
+    return;
+  }
+
+  res.json({
+    ...mapSignalRow(row),
+    marketSnapshot: row.marketSnapshot,
+    trendRegime: row.trendRegime,
+    openInterestContext: row.openInterestContext,
+    auditReport: row.auditReport,
+  });
+});
+
+export default router;
