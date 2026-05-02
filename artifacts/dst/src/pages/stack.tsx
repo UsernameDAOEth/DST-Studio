@@ -1,25 +1,21 @@
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { Check, X, ShieldCheck, Cpu, Database, Zap, Radio, AlertTriangle } from "lucide-react";
+import { Check, X, ShieldCheck, Cpu, Database, Zap, AlertTriangle } from "lucide-react";
 
 function SectionHeader({ children, sub }: { children: React.ReactNode; sub?: string }) {
   return (
     <div className="pb-4 border-b border-border mb-6">
-      <h2 className="text-xl font-display text-foreground">{children}</h2>
-      {sub && <p className="text-muted-foreground font-mono text-xs uppercase mt-1">{sub}</p>}
+      <h2 className="text-base tracking-widest text-foreground">{children}</h2>
+      {sub && <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60 mt-1">{sub}</p>}
     </div>
   );
 }
 
-function CompareCell({ yes, label }: { yes: boolean; label: string }) {
+function DoctrineItem({ label }: { label: string }) {
   return (
-    <div className="flex items-start gap-2 py-1.5">
-      {yes ? (
-        <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-      ) : (
-        <X className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0 mt-0.5" />
-      )}
-      <span className={cn("font-mono text-xs leading-tight", yes ? "text-foreground" : "text-muted-foreground/50")}>{label}</span>
+    <div className="flex items-start gap-2.5 py-1">
+      <Check className="w-3 h-3 text-primary shrink-0 mt-0.5" />
+      <span className="font-mono text-xs text-muted-foreground leading-tight">{label}</span>
     </div>
   );
 }
@@ -41,33 +37,31 @@ function StackLayer({
   status: PhaseStatus;
   note: string;
 }) {
-  const statusStyle: Record<PhaseStatus, string> = {
-    LIVE: "text-primary border-primary/40 bg-primary/5",
-    NEXT: "text-[hsl(var(--trade-wait))] border-[hsl(var(--trade-wait))]/40 bg-[hsl(var(--trade-wait))]/5",
-    SCAFFOLDED: "text-muted-foreground border-border bg-card",
-    PLANNED: "text-muted-foreground/50 border-border/40 bg-transparent",
+  const statusChip: Record<PhaseStatus, string> = {
+    LIVE: "chip-pass",
+    NEXT: "chip-warn",
+    SCAFFOLDED: "chip-neutral",
+    PLANNED: "chip-neutral",
   };
 
   return (
     <div className={cn(
-      "border p-4 flex flex-col md:flex-row md:items-start gap-4",
-      status === "LIVE" ? "border-primary/20 bg-primary/3" :
+      "terminal-panel flex flex-col md:flex-row md:items-start gap-4 p-4",
+      status === "LIVE" ? "border-primary/20" :
       status === "NEXT" ? "border-[hsl(var(--trade-wait))]/20" :
       "border-border"
     )}>
-      <div className="w-20 shrink-0">
-        <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">{phase}</div>
-        <div className={cn("inline-block border px-2 py-0.5 font-mono text-[10px] uppercase", statusStyle[status])}>
-          {status}
-        </div>
+      <div className="w-28 shrink-0">
+        <div className="micro-label mb-1.5">{phase}</div>
+        <span className={statusChip[status]}>{status}</span>
       </div>
-      <div className="flex-1">
-        <div className="font-display text-sm text-foreground mb-0.5">{name}</div>
-        <div className="font-mono text-xs text-muted-foreground mb-1">{role}</div>
-        <div className="font-mono text-[10px] text-muted-foreground/60 uppercase">{tool}</div>
+      <div className="flex-1 min-w-0">
+        <div className="font-mono text-xs font-bold text-foreground tracking-wide mb-0.5 uppercase">{name}</div>
+        <div className="font-mono text-[10px] text-muted-foreground mb-1">{role}</div>
+        <div className="micro-label text-muted-foreground/50">{tool}</div>
       </div>
       <div className="md:max-w-xs">
-        <p className="font-mono text-xs text-muted-foreground leading-relaxed">{note}</p>
+        <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{note}</p>
       </div>
     </div>
   );
@@ -75,50 +69,49 @@ function StackLayer({
 
 export default function Stack() {
   return (
-    <div className="space-y-16 max-w-5xl mx-auto pb-16">
+    <div className="space-y-14 max-w-5xl mx-auto pb-16">
 
       {/* ── HERO ── */}
       <div className="pb-6 border-b border-border">
-        <h1 className="text-3xl font-display text-foreground mb-2">THE STACK</h1>
-        <p className="font-mono text-xs uppercase text-muted-foreground mb-4">
+        <h1 className="text-xl tracking-widest text-foreground mb-2">THE STACK</h1>
+        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground/60 mb-5">
           WHAT DST IS · WHAT IT IS NOT · WHERE IT FITS IN YOUR WORKFLOW
         </p>
-        <p className="text-body max-w-2xl leading-relaxed text-muted-foreground">
-          DST is a deterministic decision layer for perp traders. It does not replace your charting tool, your execution venue, or your market intelligence subscriptions. It replaces the undisciplined part of your pre-trade process — the part where you convince yourself a setup is good because you already want to trade it.
+        <p className="font-mono text-xs text-muted-foreground max-w-2xl leading-relaxed">
+          DST is an audit-first signal system for perp traders. It does not replace your charting tool, your execution venue, or your market intelligence subscriptions. It replaces the undisciplined part of your pre-trade process — the part where you convince yourself a setup is admissible because you already want to trade it. Every possible trade is run through the DJZS audit layer. WAIT is the most common and most correct output.
         </p>
       </div>
 
-      {/* ── POSITIONING COMPARISON ── */}
+      {/* ── COMPARISON TABLE ── */}
       <div>
         <SectionHeader sub="where dst sits relative to the rest of your toolchain">
-          DECISION LAYER VS. THE ALTERNATIVES
+          DST VS. THE ALTERNATIVES — AUDIT-FIRST
         </SectionHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-px bg-border">
           {/* Header Row */}
           <div className="bg-secondary p-4">
-            <div className="font-mono text-xs text-muted-foreground uppercase">CAPABILITY</div>
+            <div className="micro-label">CAPABILITY</div>
           </div>
           <div className="bg-secondary p-4 text-center">
-            <div className="font-display text-sm text-primary">DST</div>
-            <div className="font-mono text-[10px] text-muted-foreground uppercase mt-0.5">DECISION LAYER</div>
+            <div className="font-mono text-sm font-bold text-primary tracking-widest glow-green">DST</div>
+            <div className="micro-label text-muted-foreground/60 mt-1">AUDIT-FIRST SIGNALS</div>
           </div>
           <div className="bg-secondary p-4 text-center">
-            <div className="font-display text-sm text-foreground">CHARTING</div>
-            <div className="font-mono text-[10px] text-muted-foreground uppercase mt-0.5">TRADINGVIEW ETC.</div>
+            <div className="font-mono text-sm font-bold text-foreground/70 tracking-widest">CHARTING</div>
+            <div className="micro-label text-muted-foreground/60 mt-1">TRADINGVIEW ETC.</div>
           </div>
           <div className="bg-secondary p-4 text-center">
-            <div className="font-display text-sm text-foreground">EXECUTION</div>
-            <div className="font-mono text-[10px] text-muted-foreground uppercase mt-0.5">HYPERLIQUID ETC.</div>
+            <div className="font-mono text-sm font-bold text-foreground/70 tracking-widest">EXECUTION</div>
+            <div className="micro-label text-muted-foreground/60 mt-1">HYPERLIQUID ETC.</div>
           </div>
 
-          {/* Rows */}
           {[
-            ["Pre-trade admissibility gate", true, false, false],
+            ["Pre-trade admissibility audit", true, false, false],
             ["Deterministic setup rejection", true, false, false],
             ["Evidence integration workflow", true, false, false],
             ["Explicit WAIT as disciplined outcome", true, false, false],
-            ["Rejection code audit trail", true, false, false],
+            ["Machine-readable rejection codes", true, false, false],
             ["R/R and invalidation enforcement", true, true, false],
             ["Live chart visualization", false, true, false],
             ["Draw tools and indicators", false, true, false],
@@ -128,120 +121,115 @@ export default function Stack() {
             ["Market intelligence / flow data", false, false, false],
           ].map(([label, dst, chart, exec], i) => (
             <div key={i} className="contents">
-              <div className={cn("bg-card p-3 flex items-center", i % 2 === 0 ? "" : "bg-background")}>
-                <span className="font-mono text-xs text-muted-foreground">{label as string}</span>
+              <div className={cn("p-3 flex items-center", i % 2 === 0 ? "bg-card" : "bg-background")}>
+                <span className="font-mono text-[10px] text-muted-foreground">{label as string}</span>
               </div>
               <div className={cn("p-3 flex justify-center items-center", i % 2 === 0 ? "bg-card" : "bg-background")}>
-                {dst ? <Check className="w-4 h-4 text-primary" /> : <X className="w-4 h-4 text-muted-foreground/30" />}
+                {dst ? <Check className="w-3.5 h-3.5 text-primary" /> : <X className="w-3.5 h-3.5 text-muted-foreground/25" />}
               </div>
               <div className={cn("p-3 flex justify-center items-center", i % 2 === 0 ? "bg-card" : "bg-background")}>
-                {chart ? <Check className="w-4 h-4 text-foreground/60" /> : <X className="w-4 h-4 text-muted-foreground/30" />}
+                {chart ? <Check className="w-3.5 h-3.5 text-foreground/50" /> : <X className="w-3.5 h-3.5 text-muted-foreground/25" />}
               </div>
               <div className={cn("p-3 flex justify-center items-center", i % 2 === 0 ? "bg-card" : "bg-background")}>
-                {exec ? <Check className="w-4 h-4 text-foreground/60" /> : <X className="w-4 h-4 text-muted-foreground/30" />}
+                {exec ? <Check className="w-3.5 h-3.5 text-foreground/50" /> : <X className="w-3.5 h-3.5 text-muted-foreground/25" />}
               </div>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 p-4 border border-border bg-card">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-4 h-4 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
-            <p className="font-mono text-xs text-muted-foreground leading-relaxed">
-              DST does not have draw tools, order entry, fills, or raw price chart visualization. It is intentionally narrow. Use TradingView for charts. Use Hyperliquid or equivalent for execution. Use DST to decide whether a trade is admissible before you act on it.
-            </p>
-          </div>
+        <div className="mt-3 p-4 border border-border bg-card flex items-start gap-3">
+          <AlertTriangle className="w-3.5 h-3.5 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
+          <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+            DST does not have draw tools, order entry, fills, or raw price chart visualization. It is intentionally narrow. Use TradingView for charts. Use Hyperliquid or equivalent for execution. Use DST to run the audit workflow before you act on any setup.
+          </p>
         </div>
       </div>
 
-      {/* ── WHAT DST IS NOT ── */}
+      {/* ── NOT BUILT FOR ── */}
       <div>
         <SectionHeader sub="intentional product boundaries">
           NOT BUILT FOR
         </SectionHeader>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[
             {
               title: "NOT A CHARTING PLATFORM",
-              body: "DST does not render price charts, support drawing tools, or provide raw indicator overlays. Your charting tool does that better. DST reads indicators as inputs to its admissibility workflow — it does not visualize them.",
+              body: "DST does not render price charts, support drawing tools, or provide raw indicator overlays. Your charting tool does that better. DST reads indicators as inputs to the audit workflow — it does not visualize them.",
             },
             {
               title: "NOT AN EXECUTION VENUE",
-              body: "DST does not connect to exchange APIs, submit orders, or manage positions. Live trading is explicitly disabled. DST outputs a decision: admissible or not. Execution is a separate layer.",
+              body: "DST does not connect to exchange APIs, submit orders, or manage positions. Live trading is explicitly disabled. DST produces an audit verdict: admissible or not. Execution is a separate layer.",
             },
             {
               title: "NOT A GENERAL-PURPOSE INTELLIGENCE PLATFORM",
-              body: "DST does not aggregate news, social sentiment, or broad market intelligence. Integrations like Nansen, Hyblock, and Browserbase are scaffolded as targeted evidence layers for specific admissibility rules — not as a general data dashboard.",
+              body: "DST does not aggregate news, social sentiment, or broad market intelligence. Integrations like Nansen, Hyblock, and Browserbase are narrowly scoped as targeted evidence layers for specific audit rules — not a general data dashboard.",
             },
             {
               title: "NOT A SIGNAL SUBSCRIPTION SERVICE",
-              body: "DST does not sell signals or recommend trades. It determines whether a setup you are considering meets the structural and logical conditions required for admissibility. WAIT is the most common and most correct output.",
+              body: "DST does not sell signals or recommend trades. It audits whether a setup you are considering meets the structural and logical conditions required for admissibility. WAIT is the most common and most correct output.",
             },
           ].map((item) => (
-            <div key={item.title} className="border border-border bg-card p-5">
-              <div className="font-display text-sm text-destructive/80 mb-2">{item.title}</div>
-              <p className="font-mono text-xs text-muted-foreground leading-relaxed">{item.body}</p>
+            <div key={item.title} className="terminal-panel p-5">
+              <div className="font-mono text-xs font-bold text-destructive/70 mb-2 uppercase tracking-wide">{item.title}</div>
+              <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{item.body}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── DST'S ADVANTAGE ── */}
+      {/* ── DST ADVANTAGE ── */}
       <div>
         <SectionHeader sub="where dst is stronger than everything else in your stack">
-          STRONGER HERE
+          STRONGER HERE — THE AUDIT ADVANTAGE
         </SectionHeader>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             {
               icon: ShieldCheck,
-              title: "PRE-TRADE DISCIPLINE",
-              body: "Every possible trade is run through a mandatory pre-trade checklist: thesis, regime, entry zone, invalidation, target, R/R, reason codes, reject conditions. A setup cannot be presented as tradeable until every field is accounted for.",
+              title: "PRE-TRADE AUDIT DISCIPLINE",
+              body: "Every possible trade is run through a mandatory audit checklist: thesis, regime, entry zone, invalidation, target, R/R, reason codes, reject conditions. A setup cannot be admissible until every field is accounted for.",
             },
             {
               icon: Database,
-              title: "EVIDENCE INTEGRATION",
-              body: "DST integrates DefiLlama market data, Pyth price confidence, and structured technical regime into a single admissibility verdict. Each data point either reinforces the gate or triggers a rejection code — not a chart overlay.",
+              title: "EVIDENCE-FIRST INTEGRATION",
+              body: "DST integrates DefiLlama market data as the primary data layer, Pyth price confidence, and structured technical regime into a single audit verdict. Each data point either reinforces admissibility or triggers a rejection code.",
             },
             {
               icon: Zap,
               title: "DETERMINISTIC AUDIT TRAIL",
-              body: "DJZS produces a machine-readable audit verdict that is never overridden by narrative or manual override. Every WAIT or rejection has an explicit rejection code. Every setup that passes has a process quality grade.",
+              body: "DJZS produces a machine-readable audit verdict that is never overridden by narrative or manual input. Every WAIT or rejection has an explicit rejection code. Every approved setup has a process quality grade.",
             },
           ].map((item) => (
-            <div key={item.title} className="border border-primary/20 bg-primary/3 p-5">
-              <item.icon className="w-5 h-5 text-primary mb-3" />
-              <div className="font-display text-sm text-foreground mb-2">{item.title}</div>
-              <p className="font-mono text-xs text-muted-foreground leading-relaxed">{item.body}</p>
+            <div key={item.title} className="terminal-panel border-primary/20 p-5">
+              <item.icon className="w-4 h-4 text-primary mb-3" />
+              <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wide mb-2">{item.title}</div>
+              <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{item.body}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── ARCHITECTURE STACK ROADMAP ── */}
+      {/* ── ARCHITECTURE ROADMAP ── */}
       <div>
         <SectionHeader sub="phased integration stack — narrow, intentional, evidence-first">
           ARCHITECTURE ROADMAP
         </SectionHeader>
-
         <div className="space-y-px">
           <StackLayer
             phase="CORE"
             name="DefiLlama · Signal Engine"
-            role="Market data, regime detection, technical indicators, pre-trade checklist"
+            role="Primary data layer — market data, regime detection, technical indicators, pre-trade checklist"
             tool="DEFILAMMA COINS + DEFILLAMA API · FREE · NO KEY"
             status="LIVE"
-            note="Primary data layer. Provides 4H price history, EMA/RSI/MACD/ATR, regime classification, and market snapshot for every scan. Cannot be disabled."
+            note="Provides 4H price history, EMA/RSI/MACD/ATR, regime classification, and market snapshot for every scan. First and non-negotiable data layer. Cannot be disabled."
           />
           <StackLayer
             phase="CORE"
-            name="DJZS Admissibility Engine"
+            name="DJZS Audit Engine"
             role="Deterministic audit gate — rules setups in or out, never scores or predicts"
             tool="INTERNAL · NO EXTERNAL API"
             status="LIVE"
-            note="Every setup produced by DST passes through the DJZS audit layer. Verdict is final. DJZS does not produce trading signals — it produces admissibility decisions."
+            note="Every setup produced by DST passes through the DJZS audit layer. Verdict is final. DJZS does not produce trading signals — it produces admissibility verdicts with machine-readable rejection codes."
           />
           <StackLayer
             phase="CORE"
@@ -249,7 +237,7 @@ export default function Stack() {
             role="Scan scheduler, constraint enforcement, job tracking, alert routing"
             tool="INTERNAL · RUNS ON API SERVER"
             status="LIVE"
-            note="Hermes manages the scan loop, enforces system constraints (timeframe, R/R threshold, wait bias policy), and will route approved signals when delivery channels are configured."
+            note="Hermes manages the scan loop, enforces system constraints (timeframe, R/R threshold, wait bias policy), and routes approved signals when delivery channels are configured."
           />
           <StackLayer
             phase="PHASE 3"
@@ -257,7 +245,7 @@ export default function Stack() {
             role="Live price confidence interval — degrades processVerdict when confidence is low"
             tool="PYTH HERMES REST API · FREE · NO KEY REQUIRED"
             status="LIVE"
-            note="Live BTC/ETH/SOL prices and confidence ratios. When Pyth confidence filter is enabled in Hermes constraints, low-confidence prices degrade APPROVED signals to DEGRADED."
+            note="Live BTC/ETH/SOL prices and confidence ratios. When enabled in Hermes constraints, low-confidence prices degrade APPROVED signals to DEGRADED."
           />
           <StackLayer
             phase="PHASE 4"
@@ -281,7 +269,7 @@ export default function Stack() {
             role="OI delta, liquidation heatmap, and CVD enrichment for entry quality scoring"
             tool="HYBLOCK API · PAID"
             status="PLANNED"
-            note="Will enrich the open interest context used by the admissibility gate. Replaces synthetic OI estimates with real liquidation cluster and CVD data."
+            note="Will enrich the open interest context used by the audit gate. Replaces synthetic OI estimates with real liquidation cluster and CVD data."
           />
           <StackLayer
             phase="PHASE 5"
@@ -302,28 +290,29 @@ export default function Stack() {
         </div>
       </div>
 
-      {/* ── HOW TO USE DST IN YOUR WORKFLOW ── */}
+      {/* ── WORKFLOW ── */}
       <div>
         <SectionHeader sub="recommended usage pattern">
           WHERE DST FITS IN YOUR WORKFLOW
         </SectionHeader>
-
-        <div className="border border-border bg-card">
+        <div className="terminal-panel">
           <div className="grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-border">
             {[
               { step: "1", label: "IDENTIFY", tool: "Charting tool", desc: "You identify a possible setup on your chart — structure, liquidity, HTF context." },
-              { step: "2", label: "ADMIT", tool: "DST + DJZS", desc: "Run the setup through DST. Check the trade packet: does it meet entry, invalidation, target, R/R, and regime requirements?" },
-              { step: "3", label: "GATE", tool: "DJZS audit", desc: "DJZS rules it ADMISSIBLE or not. If INADMISSIBLE or REJECTED, stop. The process has found a structural flaw." },
+              { step: "2", label: "ADMIT", tool: "DST + DJZS", desc: "Run the setup through DST. Check the audit packet: does it meet entry, invalidation, target, R/R, and regime requirements?" },
+              { step: "3", label: "GATE", tool: "DJZS audit", desc: "DJZS audits it: ADMISSIBLE or not. If INADMISSIBLE or REJECTED, stop. The audit found a structural flaw." },
               { step: "4", label: "ROUTE", tool: "Hermes", desc: "If APPROVED, Hermes routes the signal to your configured delivery channel — or you see it on the dashboard." },
-              { step: "5", label: "EXECUTE", tool: "Exchange", desc: "You execute on your preferred venue. DST has already done its job — it decided whether this was worth acting on." },
+              { step: "5", label: "EXECUTE", tool: "Exchange", desc: "You execute on your preferred venue. DST has already done its job — it audited whether this was worth acting on." },
             ].map((step) => (
               <div key={step.step} className="p-4 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border border-primary/40 flex items-center justify-center font-mono text-[10px] text-primary">{step.step}</div>
-                  <div className="font-display text-xs text-foreground">{step.label}</div>
+                  <div className="w-5 h-5 border border-primary/40 flex items-center justify-center font-mono text-[10px] text-primary font-bold">
+                    {step.step}
+                  </div>
+                  <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">{step.label}</div>
                 </div>
-                <div className="text-[10px] font-mono uppercase text-primary/70">{step.tool}</div>
-                <p className="font-mono text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
+                <div className="micro-label text-primary/60">{step.tool}</div>
+                <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{step.desc}</p>
               </div>
             ))}
           </div>
@@ -331,28 +320,30 @@ export default function Stack() {
       </div>
 
       {/* ── DOCTRINE ── */}
-      <div className="border border-border bg-card p-6">
+      <div className="terminal-panel p-6">
         <div className="flex items-start gap-4">
-          <Cpu className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-          <div>
-            <div className="font-display text-sm text-foreground mb-2">OPERATING DOCTRINE</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-              <CompareCell yes label="WAIT is the default when any required field is missing" />
-              <CompareCell yes label="DJZS verdict is never overridden by narrative or manual input" />
-              <CompareCell yes label="Every rejection has a machine-readable code" />
-              <CompareCell yes label="Process quality is graded independently of market outcome" />
-              <CompareCell yes label="No live trading — paper mode only until Phase 6" />
-              <CompareCell yes label="Integrations are narrowly scoped to admissibility evidence" />
-              <CompareCell yes label="Hermes constraints are durable policy, not user preferences" />
-              <CompareCell yes label="Pyth degrades but never approves — it can only reduce confidence" />
+          <Cpu className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-mono text-xs font-bold text-foreground uppercase tracking-widest mb-4">OPERATING DOCTRINE</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
+              <DoctrineItem label="WAIT is the default when any required field is missing" />
+              <DoctrineItem label="DJZS audit verdict is never overridden by narrative or manual input" />
+              <DoctrineItem label="Every rejection has a machine-readable code" />
+              <DoctrineItem label="Process quality is graded independently of market outcome" />
+              <DoctrineItem label="No live trading — paper mode only until Phase 6" />
+              <DoctrineItem label="Integrations are narrowly scoped to admissibility evidence" />
+              <DoctrineItem label="Hermes constraints are durable policy, not user preferences" />
+              <DoctrineItem label="Pyth degrades but never approves — it can only reduce confidence" />
+              <DoctrineItem label="DefiLlama is the primary data layer — always first, always required" />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="pt-6 border-t border-border flex flex-col md:flex-row justify-between text-xs font-mono text-muted-foreground uppercase">
-        <div>DST V1.0.0 — PHASE 3 LIVE</div>
-        <Link href="/" className="text-primary hover:underline">← BACK TO DASHBOARD</Link>
+      {/* Footer */}
+      <div className="pt-5 border-t border-border flex flex-col md:flex-row justify-between gap-2 font-mono text-[9px] text-muted-foreground/50 uppercase tracking-widest">
+        <span>DST V1.0.0 — PHASE 3 LIVE · AUDIT-FIRST SIGNAL SYSTEM</span>
+        <Link href="/" className="text-primary/70 hover:text-primary transition-colors">← BACK TO DASHBOARD</Link>
       </div>
     </div>
   );

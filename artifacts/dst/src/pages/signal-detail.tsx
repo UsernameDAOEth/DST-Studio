@@ -24,31 +24,41 @@ function DirectionChip({ direction }: { direction: string }) {
   return <span className="chip-wait">{direction}</span>;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest mb-1">{children}</div>
+    <div className="font-mono text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
+      {children}
+    </div>
   );
 }
 
-function PacketField({ label, value, accent }: { label: string; value: React.ReactNode; accent?: "long" | "short" | "wait" | "muted" }) {
+function PacketField({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: React.ReactNode;
+  accent?: "long" | "short" | "wait" | "muted";
+}) {
   const accentClass =
     accent === "long" ? "text-primary" :
     accent === "short" ? "text-destructive" :
     accent === "wait" ? "text-[hsl(var(--trade-wait))]" :
-    accent === "muted" ? "text-muted-foreground" :
+    accent === "muted" ? "text-muted-foreground/50" :
     "text-foreground";
 
   return (
     <div>
-      <SectionLabel>{label}</SectionLabel>
-      <div className={cn("font-mono text-base", accentClass)}>{value}</div>
+      <FieldLabel>{label}</FieldLabel>
+      <div className={cn("font-mono text-sm font-bold mono-nums", accentClass)}>{value}</div>
     </div>
   );
 }
 
 export default function SignalDetail() {
   const { asset } = useParams();
-  
+
   const { data: signal, isLoading } = useGetSignalByAsset(asset || "", {
     query: { enabled: !!asset, queryKey: getGetSignalByAssetQueryKey(asset || "") }
   });
@@ -57,9 +67,9 @@ export default function SignalDetail() {
     return (
       <div className="space-y-6 max-w-5xl mx-auto">
         <Skeleton className="h-10 w-48 rounded-none bg-muted" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Skeleton className="h-64 w-full rounded-none bg-muted" />
-          <Skeleton className="h-64 w-full rounded-none bg-muted" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Skeleton className="h-48 w-full rounded-none bg-muted" />
+          <Skeleton className="h-48 w-full rounded-none bg-muted" />
         </div>
       </div>
     );
@@ -68,9 +78,13 @@ export default function SignalDetail() {
   if (!signal) {
     return (
       <div className="text-center p-12">
-        <h2 className="text-2xl font-display mb-2">SIGNAL NOT FOUND</h2>
-        <p className="text-muted-foreground font-mono text-sm">COULD NOT FIND SIGNAL DATA FOR {asset}</p>
-        <Link href="/" className="text-primary hover:underline mt-4 inline-block font-mono text-sm">RETURN TO DASHBOARD</Link>
+        <h2 className="text-xl tracking-widest mb-2">SIGNAL NOT FOUND</h2>
+        <p className="text-muted-foreground font-mono text-xs uppercase tracking-widest">
+          COULD NOT FIND SIGNAL DATA FOR {asset}
+        </p>
+        <Link href="/" className="text-primary hover:underline mt-4 inline-block font-mono text-xs tracking-wider">
+          ← RETURN TO DASHBOARD
+        </Link>
       </div>
     );
   }
@@ -80,40 +94,42 @@ export default function SignalDetail() {
   const isApproved = signal.processVerdict === "APPROVED";
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="space-y-5 max-w-5xl mx-auto pb-16">
 
       {/* ── HEADER ── */}
       <div className="pb-4 border-b border-border">
         <div className="flex items-center gap-3 mb-3">
           <Link href="/">
-            <div className="p-1 border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors cursor-pointer">
-              <ArrowLeft className="w-4 h-4" />
+            <div className="p-1.5 border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors cursor-pointer">
+              <ArrowLeft className="w-3.5 h-3.5" />
             </div>
           </Link>
-          <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">TRADE PACKET</div>
+          <div className="font-mono text-[9px] text-muted-foreground uppercase tracking-[0.2em]">
+            AUDIT PACKET — {asset}
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-display text-foreground">{asset}</h1>
+              <h1 className="text-2xl tracking-widest text-foreground">{asset}</h1>
               <DirectionChip direction={signal.direction} />
               <SetupFamilyLabel family={signal.setupFamily} />
             </div>
             <div className="flex items-baseline gap-4">
-              <div className="text-2xl font-mono text-foreground">
-                {marketSnapshot ? formatCurrency(marketSnapshot.price) : "---"}
+              <div className="text-xl font-mono text-foreground mono-nums">
+                {marketSnapshot ? formatCurrency(marketSnapshot.price) : "—"}
               </div>
               {marketSnapshot && (
                 <div className={cn(
-                  "text-sm font-mono",
+                  "text-xs font-mono mono-nums",
                   marketSnapshot.priceChangePct24h >= 0 ? "text-primary" : "text-destructive"
                 )}>
                   {marketSnapshot.priceChangePct24h >= 0 ? "+" : ""}{formatPercent(marketSnapshot.priceChangePct24h)} 24H
                 </div>
               )}
             </div>
-            <div className="text-[10px] font-mono text-muted-foreground uppercase mt-1">
+            <div className="font-mono text-[9px] text-muted-foreground/60 uppercase tracking-widest mt-1.5">
               4H · COMPUTED {new Date(signal.computedAt).toLocaleString()} · PAPER MODE
             </div>
           </div>
@@ -121,7 +137,7 @@ export default function SignalDetail() {
           <div className="flex items-center gap-3">
             <ProcessGradeBadge grade={signal.processQualityGrade} />
             <Link href={`/audit/${asset}`}>
-              <div className="px-4 py-2 border border-border bg-card text-foreground font-mono text-xs uppercase hover:border-primary/40 hover:text-primary transition-colors cursor-pointer whitespace-nowrap">
+              <div className="px-4 py-2 border border-border bg-card text-foreground font-mono text-[10px] uppercase tracking-widest hover:border-primary/40 hover:text-primary transition-colors cursor-pointer whitespace-nowrap">
                 VIEW AUDIT →
               </div>
             </Link>
@@ -129,28 +145,34 @@ export default function SignalDetail() {
         </div>
       </div>
 
-      {/* ── DECISION GATE ── */}
+      {/* ── AUDIT VERDICT GATE ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <DjzsGateBadge verdict={signal.verdictDjzs} admissibility={signal.logicAdmissibility} />
-        <div className="border border-border bg-card p-4 flex items-start gap-3">
-          <div>
-            <div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">PROCESS VERDICT</div>
-            <div className="flex items-center gap-3 mb-2">
+        <div className="terminal-panel">
+          <div className="terminal-panel-header">
+            <span>PROCESS VERDICT</span>
+            <span className="text-muted-foreground/40">HERMES ENGINE</span>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center gap-3 mb-3">
               <ProcessVerdictBadge verdict={signal.processVerdict} />
               <RRRatioBadge ratio={signal.rrRatio} />
             </div>
-            <div className="flex flex-wrap gap-2 mt-2">
+            <div className="flex flex-wrap gap-2 mb-3">
               <EntryQualityBadge quality={signal.entryQuality} />
               <NarrativeRiskBadge risk={signal.narrativeRisk} />
             </div>
-            <div className="text-[10px] font-mono text-muted-foreground/70 mt-2 leading-tight">
-              Confidence: {signal.confidence}% · {signal.processVerdict === "APPROVED" ? "Meets all hard execution rules." : "One or more hard rules failed."}
+            <div className="font-mono text-[9px] text-muted-foreground/60 uppercase tracking-wide leading-relaxed">
+              CONFIDENCE: {signal.confidence}% ·{" "}
+              {signal.processVerdict === "APPROVED"
+                ? "ALL HARD EXECUTION RULES MET."
+                : "ONE OR MORE HARD RULES FAILED."}
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── REJECTION / WAIT PANEL (shown prominently when not approved) ── */}
+      {/* ── WAIT / REJECTION PANEL ── */}
       <WaitDecisionPanel
         direction={signal.direction}
         processVerdict={signal.processVerdict}
@@ -161,39 +183,34 @@ export default function SignalDetail() {
       />
 
       {/* ── TRADE PARAMETERS ── */}
-      <Card className={cn(
-        "border-border bg-card",
-        isWait && "opacity-60"
-      )}>
-        <CardHeader className="px-6 py-3 border-b border-border flex flex-row items-center justify-between">
-          <CardTitle className="text-xs font-mono text-muted-foreground uppercase">TRADE PARAMETERS</CardTitle>
-          {isWait && (
-            <span className="font-mono text-[10px] text-muted-foreground uppercase">NOT APPLICABLE — WAIT</span>
-          )}
-        </CardHeader>
-        <CardContent className="p-6">
+      <div className={cn("terminal-panel", isWait && "opacity-50")}>
+        <div className="terminal-panel-header">
+          <span>TRADE PARAMETERS</span>
+          {isWait && <span className="text-muted-foreground/50 text-[9px] tracking-widest">NOT APPLICABLE — WAIT</span>}
+        </div>
+        <div className="p-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <PacketField
               label="ENTRY ZONE"
               value={
                 signal.entryZoneLow && signal.entryZoneHigh
                   ? `${formatCurrency(signal.entryZoneLow)} – ${formatCurrency(signal.entryZoneHigh)}`
-                  : "---"
+                  : "—"
               }
             />
             <PacketField
               label="TARGET"
-              value={signal.targetZone ? formatCurrency(signal.targetZone) : "---"}
+              value={signal.targetZone ? formatCurrency(signal.targetZone) : "—"}
               accent={isWait ? "muted" : "long"}
             />
             <PacketField
               label="INVALIDATION"
-              value={signal.invalidationPrice ? formatCurrency(signal.invalidationPrice) : "---"}
+              value={signal.invalidationPrice ? formatCurrency(signal.invalidationPrice) : "—"}
               accent={isWait ? "muted" : "short"}
             />
             <PacketField
               label="R/R RATIO"
-              value={signal.rrRatio > 0 ? `${signal.rrRatio.toFixed(1)}x` : "---"}
+              value={signal.rrRatio > 0 ? `${signal.rrRatio.toFixed(1)}x` : "—"}
               accent={
                 isWait ? "muted" :
                 signal.rrRatio >= 2 ? "long" :
@@ -203,8 +220,8 @@ export default function SignalDetail() {
           </div>
 
           {!isWait && signal.reasonCodes && signal.reasonCodes.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-border">
-              <SectionLabel>STRUCTURAL EVIDENCE</SectionLabel>
+            <div className="mt-5 pt-5 border-t border-border">
+              <FieldLabel>STRUCTURAL EVIDENCE</FieldLabel>
               <div className="flex flex-wrap gap-2 mt-2">
                 {signal.reasonCodes.map(code => (
                   <span key={code} className="chip-reason">{code}</span>
@@ -212,8 +229,8 @@ export default function SignalDetail() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* ── ROUTING ── */}
       <RoutingPriorityPanel direction={signal.direction} processVerdict={signal.processVerdict} />
@@ -222,162 +239,187 @@ export default function SignalDetail() {
       {(signal.thesis || signal.whyTrade) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {signal.thesis && (
-            <div className="border border-border bg-card p-5">
-              <SectionLabel>THESIS</SectionLabel>
-              <p className="text-body italic mt-2 leading-relaxed">{signal.thesis}</p>
+            <div className="terminal-panel">
+              <div className="terminal-panel-header">THESIS</div>
+              <div className="p-5">
+                <p className="font-mono text-xs text-muted-foreground italic leading-relaxed">{signal.thesis}</p>
+              </div>
             </div>
           )}
           {signal.whyTrade && (
             <div className={cn(
-              "border bg-card p-5",
-              isWait ? "border-border" : isApproved ? "border-primary/20" : "border-destructive/20"
+              "terminal-panel",
+              isWait ? "border-border" :
+              isApproved ? "border-primary/20 glow-green-box" :
+              "border-destructive/20"
             )}>
-              <SectionLabel>{isWait ? "ASSESSMENT (NOT A TRADE)" : "ASSESSMENT"}</SectionLabel>
-              <p className="text-body mt-2 leading-relaxed">{signal.whyTrade}</p>
+              <div className="terminal-panel-header">
+                {isWait ? "ASSESSMENT — NOT A TRADE" : "ASSESSMENT"}
+              </div>
+              <div className="p-5">
+                <p className="font-mono text-xs text-muted-foreground leading-relaxed">{signal.whyTrade}</p>
+              </div>
             </div>
           )}
         </div>
       )}
 
       {/* ── PRE-TRADE CHECKLIST ── */}
-      <Card className="border-border bg-card">
-        <CardHeader className="px-6 py-3 border-b border-border flex flex-row items-center justify-between">
-          <CardTitle className="text-xs font-mono text-muted-foreground uppercase">PRE-TRADE CHECKLIST</CardTitle>
+      <div className="terminal-panel">
+        <div className="terminal-panel-header">
+          <span>PRE-TRADE CHECKLIST</span>
           {signal.preTradChecklist?.checklistComplete ? (
-            <span className="text-primary font-mono text-xs font-bold uppercase">COMPLETE</span>
+            <span className="text-primary text-[9px] font-bold tracking-widest">COMPLETE</span>
           ) : (
-            <span className="text-[hsl(var(--trade-wait))] font-mono text-xs font-bold uppercase">INCOMPLETE</span>
+            <span className="text-[hsl(var(--trade-wait))] text-[9px] font-bold tracking-widest">INCOMPLETE</span>
           )}
-        </CardHeader>
-        <CardContent className="p-6">
+        </div>
+        <div className="p-5">
           <PreTradeChecklistPanel checklist={signal.preTradChecklist} />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* ── MARKET EVIDENCE ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-        {/* Market Data */}
-        <Card className="border-border bg-card">
-          <CardHeader className="px-4 py-3 border-b border-border">
-            <CardTitle className="text-xs font-mono text-muted-foreground uppercase">MARKET STATE</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
+        {/* Market State */}
+        <div className="terminal-panel">
+          <div className="terminal-panel-header">MARKET STATE</div>
+          <div className="p-4">
             {marketSnapshot ? (
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground text-xs font-mono uppercase">24H CHANGE</span>
-                  <span className={cn("text-sm font-mono", marketSnapshot.priceChangePct24h >= 0 ? "text-primary" : "text-destructive")}>
+                  <span className="micro-label">24H CHANGE</span>
+                  <span className={cn("text-xs font-mono font-bold mono-nums", marketSnapshot.priceChangePct24h >= 0 ? "text-primary" : "text-destructive")}>
                     {marketSnapshot.priceChangePct24h >= 0 ? "+" : ""}{formatPercent(marketSnapshot.priceChangePct24h)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground text-xs font-mono uppercase">VOLUME 24H</span>
-                  <span className="text-sm font-mono">{marketSnapshot.volume24h ? `$${formatLargeNumber(marketSnapshot.volume24h)}` : "---"}</span>
+                  <span className="micro-label">VOLUME 24H</span>
+                  <span className="text-xs font-mono mono-nums text-foreground">
+                    {marketSnapshot.volume24h ? `$${formatLargeNumber(marketSnapshot.volume24h)}` : "—"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground text-xs font-mono uppercase">MARKET CAP</span>
-                  <span className="text-sm font-mono">{marketSnapshot.marketCap ? `$${formatLargeNumber(marketSnapshot.marketCap)}` : "---"}</span>
+                  <span className="micro-label">MARKET CAP</span>
+                  <span className="text-xs font-mono mono-nums text-foreground">
+                    {marketSnapshot.marketCap ? `$${formatLargeNumber(marketSnapshot.marketCap)}` : "—"}
+                  </span>
                 </div>
               </div>
-            ) : <div className="text-muted-foreground text-xs font-mono">NO MARKET DATA</div>}
-          </CardContent>
-        </Card>
+            ) : (
+              <div className="micro-label text-muted-foreground/50">NO MARKET DATA</div>
+            )}
+          </div>
+        </div>
 
         {/* Trend Regime */}
-        <Card className="border-border bg-card">
-          <CardHeader className="px-4 py-3 border-b border-border">
-            <CardTitle className="text-xs font-mono text-muted-foreground uppercase">
-              REGIME {trendRegime ? `— ${trendRegime.regime}` : ""}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
+        <div className="terminal-panel">
+          <div className="terminal-panel-header">
+            <span>REGIME</span>
+            {trendRegime && <span className="text-foreground/60">{trendRegime.regime}</span>}
+          </div>
+          <div className="p-4">
             {trendRegime ? (
-              <div className="space-y-3 font-mono text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">STRENGTH</span>
-                  <span>{trendRegime.trendStrength ?? 0}/100</span>
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">STRENGTH</span>
+                  <span className="text-xs font-mono mono-nums text-foreground">{trendRegime.trendStrength ?? 0}/100</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">EMA 9/21/50</span>
-                  <span className="text-xs">{formatCurrency(trendRegime.ema9)} / {formatCurrency(trendRegime.ema21)} / {formatCurrency(trendRegime.ema50)}</span>
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">EMA 9/21/50</span>
+                  <span className="text-[10px] font-mono mono-nums text-foreground">
+                    {formatCurrency(trendRegime.ema9)} / {formatCurrency(trendRegime.ema21)} / {formatCurrency(trendRegime.ema50)}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">RSI</span>
-                  <span className={cn(
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">RSI</span>
+                  <span className={cn("text-xs font-mono mono-nums font-bold",
                     trendRegime.rsi && trendRegime.rsi > 70 ? "text-destructive" :
-                    trendRegime.rsi && trendRegime.rsi < 30 ? "text-primary" : ""
+                    trendRegime.rsi && trendRegime.rsi < 30 ? "text-primary" : "text-foreground"
                   )}>{formatNumber(trendRegime.rsi)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">MACD HIST</span>
-                  <span className={trendRegime.macdHistogram && trendRegime.macdHistogram > 0 ? "text-primary" : "text-destructive"}>
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">MACD HIST</span>
+                  <span className={cn("text-xs font-mono mono-nums font-bold",
+                    trendRegime.macdHistogram && trendRegime.macdHistogram > 0 ? "text-primary" : "text-destructive"
+                  )}>
                     {formatNumber(trendRegime.macdHistogram, 4)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">ATR</span>
-                  <span>{formatNumber(trendRegime.atr)}</span>
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">ATR</span>
+                  <span className="text-xs font-mono mono-nums text-foreground">{formatNumber(trendRegime.atr)}</span>
                 </div>
               </div>
-            ) : <div className="text-muted-foreground text-xs font-mono">NO REGIME DATA</div>}
-          </CardContent>
-        </Card>
+            ) : (
+              <div className="micro-label text-muted-foreground/50">NO REGIME DATA</div>
+            )}
+          </div>
+        </div>
 
         {/* OI Context */}
-        <Card className="border-border bg-card">
-          <CardHeader className="px-4 py-3 border-b border-border">
-            <CardTitle className="text-xs font-mono text-muted-foreground uppercase">
-              OPEN INTEREST {openInterestContext ? `— ${openInterestContext.dominantSide}` : ""}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
+        <div className="terminal-panel">
+          <div className="terminal-panel-header">
+            <span>OPEN INTEREST</span>
+            {openInterestContext && <span className="text-foreground/60">{openInterestContext.dominantSide}</span>}
+          </div>
+          <div className="p-4">
             {openInterestContext ? (
-              <div className="space-y-3 font-mono text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">TOTAL OI</span>
-                  <span>{openInterestContext.openInterest ? `$${formatLargeNumber(openInterestContext.openInterest)}` : "---"}</span>
+              <div className="space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">TOTAL OI</span>
+                  <span className="text-xs font-mono mono-nums text-foreground">
+                    {openInterestContext.openInterest ? `$${formatLargeNumber(openInterestContext.openInterest)}` : "—"}
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">OI 24H Δ</span>
-                  <span className={openInterestContext.oiChangePct24h && openInterestContext.oiChangePct24h > 0 ? "text-primary" : "text-destructive"}>
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">OI 24H Δ</span>
+                  <span className={cn("text-xs font-mono mono-nums font-bold",
+                    openInterestContext.oiChangePct24h && openInterestContext.oiChangePct24h > 0 ? "text-primary" : "text-destructive"
+                  )}>
                     {openInterestContext.oiChangePct24h && openInterestContext.oiChangePct24h > 0 ? "+" : ""}
                     {formatPercent(openInterestContext.oiChangePct24h)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">FUNDING</span>
-                  <span className={openInterestContext.fundingRate && openInterestContext.fundingRate > 0 ? "text-primary" : "text-destructive"}>
-                    {openInterestContext.fundingRate ? `${(openInterestContext.fundingRate * 100).toFixed(4)}%` : "---"}
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">FUNDING</span>
+                  <span className={cn("text-xs font-mono mono-nums font-bold",
+                    openInterestContext.fundingRate && openInterestContext.fundingRate > 0 ? "text-primary" : "text-destructive"
+                  )}>
+                    {openInterestContext.fundingRate ? `${(openInterestContext.fundingRate * 100).toFixed(4)}%` : "—"}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs uppercase">L/S RATIO</span>
-                  <span>{formatNumber(openInterestContext.longShortRatio)}</span>
+                <div className="flex justify-between items-center">
+                  <span className="micro-label">L/S RATIO</span>
+                  <span className="text-xs font-mono mono-nums text-foreground">{formatNumber(openInterestContext.longShortRatio)}</span>
                 </div>
               </div>
-            ) : <div className="text-muted-foreground text-xs font-mono">NO OI DATA</div>}
-          </CardContent>
-        </Card>
+            ) : (
+              <div className="micro-label text-muted-foreground/50">NO OI DATA</div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── OUTCOME TRACKING STUB ── */}
-      <Card className="border-border border-dashed bg-transparent opacity-60">
-        <CardHeader className="px-6 py-3 border-b border-border border-dashed flex flex-row items-center justify-between">
-          <CardTitle className="text-xs font-mono text-muted-foreground uppercase">OUTCOME TRACKING</CardTitle>
-          <span className="chip-warn font-bold">SCAFFOLDED</span>
-        </CardHeader>
-        <CardContent className="p-6">
-          <p className="text-muted-foreground font-mono text-xs text-center uppercase">
+      <div className="terminal-panel border-dashed opacity-50">
+        <div className="terminal-panel-header">
+          <span>OUTCOME TRACKING</span>
+          <span className="chip-warn">SCAFFOLDED</span>
+        </div>
+        <div className="p-5">
+          <p className="font-mono text-[10px] text-center text-muted-foreground uppercase tracking-widest">
             PHASE 3 — PROCESS QUALITY IS RECORDED INDEPENDENTLY OF MARKET OUTCOME.
             OUTCOME RESOLUTION LOOP NOT YET LIVE.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <div className="pt-6 border-t border-border flex flex-col md:flex-row justify-between text-xs font-mono text-muted-foreground uppercase">
-        <div>DST — DECISION LAYER ONLY · NOT AN EXECUTION PLATFORM</div>
-        <div>DJZS AUDIT PROTOCOL · NOT FINANCIAL ADVICE</div>
+      {/* Footer */}
+      <div className="pt-5 border-t border-border flex flex-col md:flex-row justify-between gap-2 font-mono text-[9px] text-muted-foreground/50 uppercase tracking-widest">
+        <span>DST — DETERMINISTIC SIGNAL TRADING · NOT AN EXECUTION PLATFORM</span>
+        <span>DJZS AUDIT PROTOCOL · NOT FINANCIAL ADVICE</span>
       </div>
     </div>
   );

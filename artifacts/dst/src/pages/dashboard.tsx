@@ -7,10 +7,10 @@ import { ArrowRight, ShieldOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProcessVerdictBadge, SetupFamilyLabel } from "@/components/signal-process";
 
-function VerdictChip({ verdict }: { verdict: string }) {
-  if (verdict === "PASS") return <span className="chip-pass"><span className="w-1.5 h-1.5 rounded-none bg-primary mr-1.5"></span>PASS</span>;
-  if (verdict === "FAIL") return <span className="chip-fail"><span className="w-1.5 h-1.5 rounded-none bg-destructive mr-1.5"></span>FAIL</span>;
-  if (verdict === "WARN") return <span className="chip-warn"><span className="w-1.5 h-1.5 rounded-none bg-[hsl(var(--trade-wait))] mr-1.5"></span>WARN</span>;
+function AuditChip({ verdict }: { verdict: string }) {
+  if (verdict === "PASS") return <span className="chip-pass"><span className="w-1.5 h-1.5 rounded-none bg-primary mr-1.5 inline-block"></span>PASS</span>;
+  if (verdict === "FAIL") return <span className="chip-fail"><span className="w-1.5 h-1.5 rounded-none bg-destructive mr-1.5 inline-block"></span>FAIL</span>;
+  if (verdict === "WARN") return <span className="chip-warn"><span className="w-1.5 h-1.5 rounded-none bg-[hsl(var(--trade-wait))] mr-1.5 inline-block"></span>WARN</span>;
   return <span className="chip-skip">SKIP</span>;
 }
 
@@ -29,98 +29,97 @@ function AssetCard({ asset }: { asset: string }) {
 
   if (isLoadingSignals || isLoadingMarket) {
     return (
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-2 border-b border-border">
-          <Skeleton className="h-6 w-24 bg-muted rounded-none" />
-        </CardHeader>
-        <CardContent className="pt-4">
+      <div className="terminal-panel">
+        <div className="terminal-panel-header">
+          <Skeleton className="h-3 w-24 bg-muted rounded-none" />
+        </div>
+        <div className="p-4">
           <Skeleton className="h-8 w-32 mb-4 bg-muted rounded-none" />
           <Skeleton className="h-1 w-full bg-muted rounded-none" />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   if (!signal || !snapshot) return null;
 
   const isWait = signal.direction === "WAIT";
+  const dirColor =
+    signal.direction === "LONG" ? "hsl(var(--trade-long))" :
+    signal.direction === "SHORT" ? "hsl(var(--trade-short))" :
+    "hsl(var(--trade-wait))";
 
   return (
-    <Card className={cn(
-      "border-border bg-card hover:border-primary/40 transition-colors relative group overflow-hidden",
-      isWait && "opacity-90"
-    )}>
+    <Link href={`/signal/${asset}`} className="block group">
       <div className={cn(
-        "absolute top-0 left-0 right-0 h-[2px]",
-        signal.direction === "LONG" ? "bg-primary" :
-        signal.direction === "SHORT" ? "bg-destructive" :
-        "bg-[hsl(var(--trade-wait))]"
-      )} />
-      
-      <Link href={`/signal/${asset}`} className="absolute inset-0 z-10" />
-      
-      <CardHeader className="flex flex-row items-center justify-between pb-3 pt-4 border-b border-border px-4">
-        <CardTitle className="text-xl font-display text-foreground">{asset}</CardTitle>
-        <VerdictChip verdict={signal.verdictDjzs} />
-      </CardHeader>
-      
-      <CardContent className="px-4 py-4">
-        <div className="flex flex-col gap-4">
+        "terminal-panel transition-all hover:border-primary/30 relative overflow-hidden",
+        isWait && "opacity-80"
+      )}>
+        {/* direction bar */}
+        <div className="absolute top-0 left-0 right-0 h-[1px]" style={{ backgroundColor: dirColor }} />
+
+        {/* header row */}
+        <div className="terminal-panel-header">
+          <span className="text-foreground tracking-widest">{asset}</span>
+          <AuditChip verdict={signal.verdictDjzs} />
+        </div>
+
+        <div className="p-4 space-y-3">
+          {/* price + direction */}
           <div className="flex justify-between items-end">
             <div>
-              <div className="text-3xl font-mono text-foreground leading-none mb-1">{formatCurrency(snapshot.price)}</div>
+              <div className="text-2xl font-mono text-foreground leading-none mb-1 mono-nums">
+                {formatCurrency(snapshot.price)}
+              </div>
               <div className={cn(
-                "text-sm font-mono flex items-center",
+                "text-xs font-mono mono-nums",
                 snapshot.priceChangePct24h >= 0 ? "text-primary" : "text-destructive"
               )}>
-                {snapshot.priceChangePct24h >= 0 ? "+" : ""}{formatPercent(snapshot.priceChangePct24h)}
+                {snapshot.priceChangePct24h >= 0 ? "+" : ""}{formatPercent(snapshot.priceChangePct24h)} 24H
               </div>
             </div>
             <DirectionChip direction={signal.direction} />
           </div>
 
+          {/* wait panel or confidence bar */}
           {isWait ? (
-            <div className="border border-[hsl(var(--trade-wait))]/30 bg-[hsl(var(--trade-wait))]/5 p-3 flex items-start gap-2">
-              <ShieldOff className="w-3.5 h-3.5 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
-              <div className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
-                WAIT IS THE CORRECT OUTCOME — NO ADMISSIBLE SETUP FOUND. REVIEW TRADE PACKET FOR REASONS.
+            <div className="border border-[hsl(var(--trade-wait))]/25 bg-[hsl(var(--trade-wait))]/4 p-3 flex items-start gap-2">
+              <ShieldOff className="w-3 h-3 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
+              <div className="micro-label text-[hsl(var(--trade-wait))]/80 leading-relaxed normal-case text-[9px] uppercase tracking-wider">
+                WAIT — NO ADMISSIBLE SETUP. AUDIT FOUND INSUFFICIENT STRUCTURAL EVIDENCE.
               </div>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-[10px] uppercase text-muted-foreground font-mono">
+            <div className="space-y-1">
+              <div className="flex justify-between micro-label">
                 <span>CONFIDENCE</span>
-                <span>{signal.confidence}%</span>
+                <span className="text-foreground">{signal.confidence}%</span>
               </div>
-              <div className="h-[1px] w-full bg-secondary overflow-hidden">
+              <div className="h-px w-full bg-secondary overflow-hidden">
                 <div
-                  className={cn(
-                    "h-full",
-                    signal.direction === "LONG" ? "bg-primary" :
-                    signal.direction === "SHORT" ? "bg-destructive" :
-                    "bg-[hsl(var(--trade-wait))]"
-                  )}
-                  style={{ width: `${signal.confidence}%` }}
+                  className="h-full"
+                  style={{ width: `${signal.confidence}%`, backgroundColor: dirColor }}
                 />
               </div>
             </div>
           )}
 
-          <div className="flex justify-between items-center pt-1 border-t border-border/50">
+          {/* verdict + R/R footer */}
+          <div className="flex justify-between items-center pt-1 border-t border-border/40">
             <div className="flex flex-col gap-1">
               <ProcessVerdictBadge verdict={signal.processVerdict} />
               <SetupFamilyLabel family={signal.setupFamily} />
             </div>
             {signal.rrRatio > 0 && !isWait && (
               <div className={cn(
-                "font-mono text-xs",
+                "font-mono text-xs mono-nums font-bold",
                 signal.rrRatio >= 2 ? "text-primary" : signal.rrRatio >= 1.5 ? "text-[hsl(var(--trade-wait))]" : "text-destructive"
-              )}>R/R: {signal.rrRatio.toFixed(1)}x</div>
+              )}>R/R {signal.rrRatio.toFixed(1)}x</div>
             )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Link>
   );
 }
 
@@ -132,108 +131,115 @@ export default function Dashboard() {
   const waitPct = totalFeed > 0 ? Math.round((totalWait / totalFeed) * 100) : null;
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
+    <div className="space-y-8 max-w-6xl mx-auto pb-16">
 
-      {/* ── HEADER + LAYER STRIP ── */}
-      <div className="pb-4 border-b border-border">
-        <h1 className="text-2xl font-display text-foreground mb-1">ADMISSIBILITY CONSOLE</h1>
-        <p className="text-muted-foreground font-mono text-xs uppercase mb-3">
-          4H TIMEFRAME // ETH · BTC · SOL // PAPER MODE ONLY
-        </p>
+      {/* ── PAGE HEADER ── */}
+      <div className="pb-5 border-b border-border">
+        <div className="flex items-baseline gap-4 mb-1">
+          <h1 className="text-xl tracking-widest text-foreground">ADMISSIBILITY CONSOLE</h1>
+          <span className="micro-label text-muted-foreground/60">4H · ETH · BTC · SOL · PAPER MODE</span>
+        </div>
 
-        {/* Three-layer positioning strip */}
-        <div className="grid grid-cols-3 border border-border bg-card">
+        {/* Three-layer system identity strip */}
+        <div className="grid grid-cols-3 border border-border bg-card mt-4">
           <div className="px-4 py-3 border-r border-border">
-            <div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">① DST FINDS</div>
-            <div className="text-xs font-mono text-foreground leading-tight">
-              Possible trades from DefiLlama data, technical regime, and structure
+            <div className="micro-label mb-1.5">① DST SIGNALS</div>
+            <div className="font-mono text-[10px] text-foreground leading-relaxed">
+              Possible trades from DefiLlama data, technical regime, and market structure
             </div>
           </div>
           <div className="px-4 py-3 border-r border-border">
-            <div className="text-[10px] font-mono uppercase text-primary mb-1">② DJZS GATES</div>
-            <div className="text-xs font-mono text-foreground leading-tight">
-              Admissibility verdict — deterministic, not predictive, never overridden
+            <div className="micro-label text-primary mb-1.5">② DJZS AUDITS</div>
+            <div className="font-mono text-[10px] text-foreground leading-relaxed">
+              Deterministic audit verdict — rules setups in or out, never overridden
             </div>
           </div>
           <div className="px-4 py-3">
-            <div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">③ HERMES RUNS</div>
-            <div className="text-xs font-mono text-foreground leading-tight">
+            <div className="micro-label mb-1.5">③ HERMES RUNS</div>
+            <div className="font-mono text-[10px] text-foreground leading-relaxed">
               Orchestration runtime — constraints, scan loop, Pyth, alert routing
             </div>
           </div>
         </div>
 
         {waitPct !== null && (
-          <div className="mt-2 text-[10px] font-mono text-muted-foreground uppercase">
-            SIGNAL FEED: {waitPct}% WAIT — WAIT IS THE CORRECT OUTCOME WHEN NO SETUP MEETS ADMISSIBILITY THRESHOLD
+          <div className="mt-2.5 font-mono text-[9px] text-muted-foreground/60 uppercase tracking-widest">
+            SIGNAL FEED: {waitPct}% WAIT — WAIT IS THE CORRECT OUTCOME WHEN NO SETUP PASSES AUDIT
           </div>
         )}
       </div>
 
       {/* ── ASSET CARDS ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <AssetCard asset="ETH" />
         <AssetCard asset="BTC" />
         <AssetCard asset="SOL" />
       </div>
 
       {/* ── SIGNAL FEED ── */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="flex items-center justify-between border-b border-border pb-2">
-          <h2 className="text-sm font-mono text-muted-foreground uppercase">SIGNAL FEED</h2>
-          <div className="text-[10px] font-mono text-muted-foreground uppercase">
+          <div className="micro-label text-foreground">SIGNAL FEED</div>
+          <div className="micro-label text-muted-foreground/60">
             MOST SCANS END IN WAIT — THIS IS BY DESIGN
           </div>
         </div>
-        
-        <div className="border border-border bg-transparent overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-secondary text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">TIME</th>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">ASSET</th>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">DIR</th>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">CONF</th>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">DJZS</th>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">PROCESS</th>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">R/R</th>
-                <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">SUMMARY</th>
-                <th className="px-4 py-2 text-right font-mono font-medium text-xs uppercase">PKT</th>
+
+        <div className="border border-border bg-transparent overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-secondary border-b border-border">
+                <th className="px-4 py-2 text-left micro-label">TIME</th>
+                <th className="px-4 py-2 text-left micro-label">ASSET</th>
+                <th className="px-4 py-2 text-left micro-label">DIR</th>
+                <th className="px-4 py-2 text-left micro-label">CONF</th>
+                <th className="px-4 py-2 text-left micro-label">DJZS AUDIT</th>
+                <th className="px-4 py-2 text-left micro-label">PROCESS</th>
+                <th className="px-4 py-2 text-left micro-label">R/R</th>
+                <th className="px-4 py-2 text-left micro-label">SUMMARY</th>
+                <th className="px-4 py-2 text-right micro-label">PKT</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border bg-transparent">
+            <tbody className="divide-y divide-border/50 bg-transparent">
               {isLoadingFeed ? (
                 Array(5).fill(0).map((_, i) => (
                   <tr key={i}>
                     {Array(9).fill(0).map((_, j) => (
-                      <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full rounded-none bg-muted" /></td>
+                      <td key={j} className="px-4 py-3">
+                        <Skeleton className="h-3 w-full rounded-none bg-muted" />
+                      </td>
                     ))}
                   </tr>
                 ))
               ) : feed?.map((entry) => (
                 <tr key={entry.id} className={cn(
                   "hover:bg-card transition-colors group",
-                  entry.direction === "WAIT" && "opacity-70"
+                  entry.direction === "WAIT" && "opacity-60"
                 )}>
-                  <td className="px-4 py-3 font-mono text-muted-foreground whitespace-nowrap">
+                  <td className="px-4 py-2.5 font-mono text-muted-foreground whitespace-nowrap mono-nums">
                     {new Date(entry.computedAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })}
                   </td>
-                  <td className="px-4 py-3 font-display text-foreground font-bold">{entry.asset}</td>
-                  <td className="px-4 py-3"><DirectionChip direction={entry.direction} /></td>
-                  <td className="px-4 py-3 font-mono">{entry.confidence}%</td>
-                  <td className="px-4 py-3"><VerdictChip verdict={entry.verdict} /></td>
-                  <td className="px-4 py-3"><ProcessVerdictBadge verdict={entry.processVerdict} /></td>
-                  <td className="px-4 py-3 font-mono text-xs">
+                  <td className="px-4 py-2.5 font-mono text-foreground font-bold tracking-wider">{entry.asset}</td>
+                  <td className="px-4 py-2.5"><DirectionChip direction={entry.direction} /></td>
+                  <td className="px-4 py-2.5 font-mono text-muted-foreground mono-nums">{entry.confidence}%</td>
+                  <td className="px-4 py-2.5"><AuditChip verdict={entry.verdict} /></td>
+                  <td className="px-4 py-2.5"><ProcessVerdictBadge verdict={entry.processVerdict} /></td>
+                  <td className="px-4 py-2.5 font-mono mono-nums">
                     {entry.rrRatio ? (
-                      <span className={cn(entry.rrRatio >= 2 ? "text-primary" : entry.rrRatio >= 1.5 ? "text-[hsl(var(--trade-wait))]" : "text-destructive")}>
+                      <span className={cn(
+                        "font-bold",
+                        entry.rrRatio >= 2 ? "text-primary" : entry.rrRatio >= 1.5 ? "text-[hsl(var(--trade-wait))]" : "text-destructive"
+                      )}>
                         {entry.rrRatio.toFixed(1)}x
                       </span>
-                    ) : <span className="text-muted-foreground/50">---</span>}
+                    ) : <span className="text-muted-foreground/40">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-body max-w-md truncate">{entry.summary}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/signal/${entry.asset}`} className="inline-flex items-center justify-center p-1 border border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors cursor-pointer">
-                      <ArrowRight className="w-4 h-4" />
+                  <td className="px-4 py-2.5 text-muted-foreground max-w-xs truncate">{entry.summary}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <Link href={`/signal/${entry.asset}`}>
+                      <div className="inline-flex items-center justify-center p-1 border border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors cursor-pointer">
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </div>
                     </Link>
                   </td>
                 </tr>
@@ -241,14 +247,17 @@ export default function Dashboard() {
             </tbody>
           </table>
           {!isLoadingFeed && feed?.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground font-mono text-sm uppercase">NO_SIGNALS_FOUND — TRIGGER A SCAN FROM HERMES</div>
+            <div className="p-8 text-center font-mono text-xs text-muted-foreground uppercase tracking-widest">
+              NO SIGNALS FOUND — TRIGGER A SCAN FROM HERMES
+            </div>
           )}
         </div>
       </div>
-      
-      <div className="pt-8 mt-8 border-t border-border flex flex-col md:flex-row justify-between text-xs font-mono text-muted-foreground uppercase">
-        <div>DST — DECISION LAYER ONLY. NOT A CHARTING TOOL. NOT AN EXECUTION PLATFORM.</div>
-        <div>DJZS AUDIT PROTOCOL — NOT FINANCIAL ADVICE</div>
+
+      {/* Footer */}
+      <div className="pt-6 border-t border-border flex flex-col md:flex-row justify-between gap-2 micro-label text-muted-foreground/50">
+        <span>DST — DETERMINISTIC SIGNAL TRADING. NOT A CHARTING TOOL. NOT AN EXECUTION PLATFORM.</span>
+        <span>DJZS AUDIT PROTOCOL — NOT FINANCIAL ADVICE</span>
       </div>
     </div>
   );

@@ -29,13 +29,14 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 ## DST — Deterministic Signal Trader (Phase 4)
 
 ### Purpose
-DST is the **decision layer** — a deterministic pre-trade admissibility system for perp traders. It does not replace charting tools (TradingView) or execution venues (Hyperliquid). It replaces the undisciplined part of the pre-trade process. DST finds possible trades. DJZS decides whether they are admissible. Hermes runs the system. WAIT is not a failure state — it is the correct outcome when no setup meets the admissibility threshold.
+DST is an **audit-first signal system** — a deterministic pre-trade audit layer for perp traders. It does not replace charting tools (TradingView) or execution venues (Hyperliquid). It replaces the undisciplined part of the pre-trade process. DST signals possible trades. DJZS audits whether they are admissible. Hermes runs the system. WAIT is not a failure state — it is the correct outcome when no setup passes the audit threshold.
 
+**Roles (canonical):** DST = Deterministic Signal Trading (finds possible trades). DJZS = Audit layer (audits setups for admissibility — deterministic, never overridden). Hermes = Runtime (scan loop, constraints, routing).
 **DST is NOT:** a charting platform, an execution venue, a signal subscription service, or a general-purpose intelligence dashboard.
-**DST IS:** a deterministic decision gate with explicit rejection codes, process quality grades, and an audit trail that does not score setups — it rules them in or out.
+**DST IS:** an audit-first signal system. DJZS audits setups — rules them in or out with machine-readable rejection codes and an immutable process quality grade. WAIT is the most common and most correct output.
 
 ### Architecture
-- **Frontend** (`artifacts/dst`): React + Vite DJZS dark terminal UI (near-black #080B0F, acid lime #A3E635)
+- **Frontend** (`artifacts/dst`): React + Vite terminal brutalist UI — JetBrains Mono throughout, near-black #070A0D, green #84CC16, amber #F59E0B, red #F23030. No Space Grotesk. No border-radius. Restrained green glow on active elements. `terminal-panel`, `terminal-panel-header`, `micro-label`, `glow-green` utilities in index.css.
 - **Backend** (`artifacts/api-server`): Express API at `/api`
 - **Signal Engine** (`artifacts/api-server/src/lib/dst/signalEngine.ts`): Full pre-trade process enforcement, reads HermesConstraints
 - **Hermes Module** (`artifacts/api-server/src/lib/hermes/`): Orchestration runtime — constraints, scan loop, metrics, evaluation

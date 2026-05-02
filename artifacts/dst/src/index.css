@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -41,7 +41,6 @@
   --color-destructive-foreground: hsl(var(--destructive-foreground));
   --color-destructive-border: var(--destructive-border);
 
-  /* DJZS specific */
   --color-trade-long: hsl(var(--trade-long));
   --color-trade-short: hsl(var(--trade-short));
   --color-trade-wait: hsl(var(--trade-wait));
@@ -70,57 +69,58 @@
 }
 
 :root {
-  /* DJZS Palette */
-  --background: 216 30% 5%; /* #080B0F */
-  --foreground: 198 40% 89%; /* #D8E8F0 */
-  --body-text: 205 20% 63%; /* #8FA3B1 */
-  
-  --border: 214 29% 15%; /* #1C2633 */
-  
-  --card: 216 28% 7%; /* #0D1117 */
-  --card-foreground: 198 40% 89%;
-  --card-border: 214 29% 15%;
-  
-  --sidebar: 216 30% 5%;
-  --sidebar-foreground: 198 40% 89%;
-  --sidebar-border: 214 29% 15%;
-  --sidebar-primary: 79 78% 55%;
-  --sidebar-primary-foreground: 216 30% 5%;
-  --sidebar-accent: 216 28% 7%;
-  --sidebar-accent-foreground: 79 78% 55%;
-  --sidebar-ring: 79 78% 55%;
+  /* DST Terminal Palette */
+  --background: 216 30% 4%;   /* #070A0D — near black */
+  --foreground: 0 0% 92%;     /* #EBEBEB — off-white terminal */
+  --body-text: 210 15% 58%;   /* #848F9E — mid-grey */
 
-  --popover: 216 28% 7%;
-  --popover-foreground: 198 40% 89%;
-  --popover-border: 214 29% 15%;
+  --border: 214 25% 13%;      /* #181F28 — subtle separator */
 
-  --primary: 79 78% 55%; /* LIME #A3E635 */
-  --primary-foreground: 216 30% 5%;
+  --card: 216 28% 6%;         /* #0B0F14 — panel background */
+  --card-foreground: 0 0% 92%;
+  --card-border: 214 25% 13%;
 
-  --secondary: 212 30% 10%; /* #111820 */
-  --secondary-foreground: 198 40% 89%;
+  --sidebar: 216 30% 4%;
+  --sidebar-foreground: 0 0% 92%;
+  --sidebar-border: 214 25% 13%;
+  --sidebar-primary: 82 77% 48%;
+  --sidebar-primary-foreground: 216 30% 4%;
+  --sidebar-accent: 216 28% 6%;
+  --sidebar-accent-foreground: 82 77% 48%;
+  --sidebar-ring: 82 77% 48%;
 
-  --muted: 212 30% 10%;
-  --muted-foreground: 218 17% 35%; /* #4A5568 */
+  --popover: 216 28% 6%;
+  --popover-foreground: 0 0% 92%;
+  --popover-border: 214 25% 13%;
 
-  --accent: 216 28% 7%;
-  --accent-foreground: 198 40% 89%;
+  --primary: 82 77% 48%;      /* #84CC16 — green primary */
+  --primary-foreground: 216 30% 4%;
 
-  --destructive: 0 84% 60%; /* RED #EF4444 */
-  --destructive-foreground: 216 30% 5%;
+  --secondary: 214 25% 9%;    /* #0E1318 — slightly lighter than card */
+  --secondary-foreground: 0 0% 92%;
 
-  --input: 214 29% 15%;
-  --ring: 79 78% 55%;
+  --muted: 214 25% 9%;
+  --muted-foreground: 214 15% 38%; /* #525E6E */
 
-  --trade-long: 79 78% 55%; /* LIME */
-  --trade-short: 0 84% 60%; /* RED */
-  --trade-wait: 32 95% 44%; /* AMBER #D97706 */
+  --accent: 216 28% 6%;
+  --accent-foreground: 0 0% 92%;
 
-  --app-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --app-font-serif: Georgia, serif;
+  --destructive: 0 90% 58%;   /* #F23030 — red reject */
+  --destructive-foreground: 0 0% 4%;
+
+  --input: 214 25% 13%;
+  --ring: 82 77% 48%;
+
+  --trade-long: 82 77% 48%;   /* GREEN — long / pass */
+  --trade-short: 0 90% 58%;   /* RED — short / fail */
+  --trade-wait: 38 92% 50%;   /* AMBER #F59E0B — wait / active */
+
+  /* JetBrains Mono for everything — terminal system */
+  --app-font-sans: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  --app-font-serif: 'JetBrains Mono', monospace;
   --app-font-mono: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
-  --app-font-display: 'Space Grotesk', sans-serif;
-  
+  --app-font-display: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+
   --radius: 0;
 
   --sidebar-primary-border: var(--primary);
@@ -140,18 +140,29 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-mono antialiased bg-background;
     color: hsl(var(--body-text));
+    font-feature-settings: "tnum";
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display uppercase tracking-tight text-foreground font-bold;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+    color: hsl(var(--foreground));
   }
 }
 
+/* ── MONO NUMERIC UTILITY ── */
 .mono-nums {
   font-feature-settings: "tnum";
   font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* ── FONT DISPLAY (now also mono) ── */
+.font-display {
   font-family: var(--font-mono);
 }
 
@@ -164,41 +175,40 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
-  
-  .font-display {
-    font-family: var(--font-display);
-  }
 
-  /* DJZS Chip Utilities — all self-contained, no @apply chaining */
-  .chip, .chip-pass, .chip-long, .chip-fail, .chip-short, .chip-wait, .chip-warn, .chip-skip, .chip-neutral, .chip-reason {
+  /* ── DST CHIP SYSTEM ── */
+  .chip, .chip-pass, .chip-long, .chip-fail, .chip-short,
+  .chip-wait, .chip-warn, .chip-skip, .chip-neutral, .chip-reason {
     display: inline-flex;
     align-items: center;
     padding: 2px 6px;
     border-width: 1px;
     border-style: solid;
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-family: var(--font-mono);
     text-transform: uppercase;
     white-space: nowrap;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
+    font-weight: 700;
   }
 
   .chip-pass, .chip-long {
-    border-color: color-mix(in srgb, hsl(var(--primary)) 30%, transparent);
+    border-color: color-mix(in srgb, hsl(var(--primary)) 35%, transparent);
     color: hsl(var(--primary));
-    background-color: color-mix(in srgb, hsl(var(--primary)) 10%, transparent);
+    background-color: color-mix(in srgb, hsl(var(--primary)) 8%, transparent);
+    box-shadow: 0 0 8px color-mix(in srgb, hsl(var(--primary)) 12%, transparent);
   }
 
   .chip-fail, .chip-short {
-    border-color: color-mix(in srgb, hsl(var(--destructive)) 30%, transparent);
+    border-color: color-mix(in srgb, hsl(var(--destructive)) 35%, transparent);
     color: hsl(var(--destructive));
-    background-color: color-mix(in srgb, hsl(var(--destructive)) 10%, transparent);
+    background-color: color-mix(in srgb, hsl(var(--destructive)) 8%, transparent);
   }
 
   .chip-wait, .chip-warn {
-    border-color: color-mix(in srgb, hsl(var(--trade-wait)) 30%, transparent);
+    border-color: color-mix(in srgb, hsl(var(--trade-wait)) 35%, transparent);
     color: hsl(var(--trade-wait));
-    background-color: color-mix(in srgb, hsl(var(--trade-wait)) 10%, transparent);
+    background-color: color-mix(in srgb, hsl(var(--trade-wait)) 8%, transparent);
   }
 
   .chip-skip, .chip-neutral {
@@ -211,5 +221,63 @@
     border-color: hsl(var(--border));
     color: hsl(var(--body-text));
     background-color: hsl(var(--secondary));
+  }
+
+  /* ── GLOW UTILITIES ── */
+  .glow-green {
+    text-shadow: 0 0 10px color-mix(in srgb, hsl(var(--primary)) 55%, transparent);
+  }
+
+  .glow-green-box {
+    box-shadow: 0 0 0 1px color-mix(in srgb, hsl(var(--primary)) 20%, transparent),
+                0 0 12px color-mix(in srgb, hsl(var(--primary)) 8%, transparent);
+  }
+
+  .glow-red-box {
+    box-shadow: 0 0 0 1px color-mix(in srgb, hsl(var(--destructive)) 20%, transparent),
+                0 0 12px color-mix(in srgb, hsl(var(--destructive)) 8%, transparent);
+  }
+
+  .glow-amber-box {
+    box-shadow: 0 0 0 1px color-mix(in srgb, hsl(var(--trade-wait)) 20%, transparent),
+                0 0 12px color-mix(in srgb, hsl(var(--trade-wait)) 8%, transparent);
+  }
+
+  /* ── TERMINAL PANEL ── */
+  .terminal-panel {
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--card));
+  }
+
+  .terminal-panel-header {
+    padding: 8px 16px;
+    border-bottom: 1px solid hsl(var(--border));
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* ── MICRO LABEL ── */
+  .micro-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* ── ACTIVE NAV GLOW ── */
+  .nav-active {
+    border-left: 2px solid hsl(var(--primary));
+    color: hsl(var(--primary));
+    background-color: hsl(var(--card));
+    text-shadow: 0 0 8px color-mix(in srgb, hsl(var(--primary)) 40%, transparent);
   }
 }
