@@ -50,12 +50,13 @@ async function getOrComputeSignal(asset: string) {
       rejectIf: signal.rejectIf,
       rejectionCodes: signal.rejectionCodes,
       processQualityGrade: signal.processQualityGrade,
-      preTradChecklist: signal.preTradChecklist as Record<string, unknown>,
-      outcomeTracking: signal.outcomeTracking as Record<string, unknown>,
-      marketSnapshot: signal.marketSnapshot as Record<string, unknown>,
-      trendRegime: signal.trendRegime as Record<string, unknown>,
-      openInterestContext: signal.openInterestContext as Record<string, unknown>,
-      auditReport: signal.auditReport as Record<string, unknown>,
+      preTradChecklist: signal.preTradChecklist as unknown as Record<string, unknown>,
+      outcomeTracking: signal.outcomeTracking as unknown as Record<string, unknown>,
+      marketSnapshot: signal.marketSnapshot as unknown as Record<string, unknown>,
+      trendRegime: signal.trendRegime as unknown as Record<string, unknown>,
+      openInterestContext: signal.openInterestContext as unknown as Record<string, unknown>,
+      auditReport: signal.auditReport as unknown as Record<string, unknown>,
+      dataQuality: signal.dataQuality as unknown as Record<string, unknown>,
     })
     .returning();
   return inserted;
@@ -150,6 +151,7 @@ router.get("/:asset", async (req, res) => {
     auditReport: row.auditReport,
     preTradChecklist: row.preTradChecklist,
     outcomeTracking: row.outcomeTracking,
+    dataQuality: row.dataQuality,
   });
 });
 

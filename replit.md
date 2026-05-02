@@ -26,7 +26,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
 
-## DST — Deterministic Signal Trader (Phase 4)
+## DST — Deterministic Signal Trader (Phase 5 — Data Quality Hardening)
 
 ### Purpose
 DST is an **audit-first signal system** — a deterministic pre-trade audit layer for perp traders. It does not replace charting tools (TradingView) or execution venues (Hyperliquid). It replaces the undisciplined part of the pre-trade process. DST signals possible trades. DJZS audits whether they are admissible. Hermes runs the system. WAIT is not a failure state — it is the correct outcome when no setup passes the audit threshold.
@@ -38,13 +38,14 @@ DST is an **audit-first signal system** — a deterministic pre-trade audit laye
 ### Architecture
 - **Frontend** (`artifacts/dst`): React + Vite terminal brutalist UI — JetBrains Mono throughout, near-black #070A0D, green #84CC16, amber #F59E0B, red #F23030. No Space Grotesk. No border-radius. Restrained green glow on active elements. `terminal-panel`, `terminal-panel-header`, `micro-label`, `glow-green` utilities in index.css.
 - **Backend** (`artifacts/api-server`): Express API at `/api`
-- **Signal Engine** (`artifacts/api-server/src/lib/dst/signalEngine.ts`): Full pre-trade process enforcement, reads HermesConstraints
+- **Signal Engine** (`artifacts/api-server/src/lib/dst/signalEngine.ts`): Full pre-trade process enforcement, reads HermesConstraints, now includes DataQualityReport + data guards
+- **Quality Model** (`artifacts/api-server/src/lib/quality/types.ts`): Canonical data-quality types — DataProvenance, DataQualityReport, QualityFlag, PythVerifierResult
 - **Hermes Module** (`artifacts/api-server/src/lib/hermes/`): Orchestration runtime — constraints, scan loop, metrics, evaluation
-- **Pyth Client** (`artifacts/api-server/src/lib/pyth/pythClient.ts`): Live price + confidence via Hermes REST API (free, no key)
+- **Pyth Client** (`artifacts/api-server/src/lib/pyth/pythClient.ts`): Secondary price-confidence verifier via Hermes REST API (free, no key). Scaffolded as CONFIRMS/DIVERGES/UNAVAILABLE/SKIPPED verifier.
 - **Integration Registry** (`artifacts/api-server/src/lib/integrations/registry.ts`): 7 scaffolded integration stubs
-- **DefiLlama Client** (`artifacts/api-server/src/lib/dst/defillamaClient.ts`): Market data fetching
+- **DefiLlama Client** (`artifacts/api-server/src/lib/dst/defillamaClient.ts`): Hardened ingestion with provenance — `NormalizedPriceResult`, `NormalizedHistoryResult`, stale thresholds, fallback flags
 - **Agent Interpreter** (`artifacts/api-server/src/lib/dst/agentInterpreter.ts`): Chat command processing
-- **Database**: PostgreSQL — signals, watchlist, alerts tables (Phase 2 schema)
+- **Database**: PostgreSQL — signals, watchlist, alerts tables. signals table now has `data_quality` jsonb column (Phase 5).
 
 ### Hermes Module — Phase 3
 - `constraints.ts` — system constraints (timeframe, R/R threshold, Pyth filter, alert routing, wait bias policy). Persisted to `/tmp/hermes-constraints.json`

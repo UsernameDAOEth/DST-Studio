@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.2.0
  */
 import type { AuditReport } from "./auditReport";
+import type { DataQualityReport } from "./dataQualityReport";
 import type { MarketSnapshot } from "./marketSnapshot";
 import type { OIContext } from "./oIContext";
 import type { OutcomeTracking } from "./outcomeTracking";
@@ -20,4 +21,7 @@ export type SignalDetail = Signal & {
   auditReport?: AuditReport;
   preTradChecklist?: PreTradeChecklist;
   outcomeTracking?: OutcomeTracking;
+  /** Data provenance and quality report for this signal. Surfaces source hierarchy, freshness, quality flags, and the Pyth secondary verifier result. Degrade or WAIT signals appear here when data quality falls below threshold.
+   */
+  dataQuality?: DataQualityReport;
 };

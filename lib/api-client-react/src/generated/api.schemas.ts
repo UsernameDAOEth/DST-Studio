@@ -151,7 +151,7 @@ export interface Signal {
   /** Explicit conditions that would invalidate this signal if triggered. e.g. "Price closes below EMA50", "OI drops > 15% in 4H".
    */
   rejectIf: string[];
-  /** Machine-readable codes for why the setup was rejected or degraded. Possible values: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY.
+  /** Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY. Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT).
    */
   rejectionCodes: string[];
   /** Overall process quality grade. Reflects discipline of the setup independent of market outcome.
@@ -298,6 +298,159 @@ export interface OutcomeTracking {
   processScore?: number | null;
 }
 
+/**
+ * Overall data quality grade derived from the worst flags present. CRITICAL = missing or unavailable price data — forces WAIT. POOR = stale price, fallback used, or insufficient history. DEGRADED = conflicting prices, Pyth divergence, or low confidence. GOOD = all inputs fresh and verified.
+
+ */
+export type DataQualityReportGrade =
+  (typeof DataQualityReportGrade)[keyof typeof DataQualityReportGrade];
+
+export const DataQualityReportGrade = {
+  GOOD: "GOOD",
+  DEGRADED: "DEGRADED",
+  POOR: "POOR",
+  CRITICAL: "CRITICAL",
+} as const;
+
+export type DataQualityReportFlagsItem =
+  (typeof DataQualityReportFlagsItem)[keyof typeof DataQualityReportFlagsItem];
+
+export const DataQualityReportFlagsItem = {
+  STALE_PRICE: "STALE_PRICE",
+  STALE_HISTORY: "STALE_HISTORY",
+  MISSING_PRICE: "MISSING_PRICE",
+  MISSING_HISTORY: "MISSING_HISTORY",
+  INSUFFICIENT_HISTORY: "INSUFFICIENT_HISTORY",
+  FALLBACK_PRICE_USED: "FALLBACK_PRICE_USED",
+  SYNTHETIC_OI: "SYNTHETIC_OI",
+  SYNTHETIC_FUNDING: "SYNTHETIC_FUNDING",
+  LOW_CONFIDENCE: "LOW_CONFIDENCE",
+  CONFLICTING_PRICES: "CONFLICTING_PRICES",
+  PYTH_DIVERGENCE: "PYTH_DIVERGENCE",
+  PYTH_UNAVAILABLE: "PYTH_UNAVAILABLE",
+  TVL_MISSING: "TVL_MISSING",
+  VOLUME_MISSING: "VOLUME_MISSING",
+  DATA_UNAVAILABLE: "DATA_UNAVAILABLE",
+} as const;
+
+/**
+ * The authoritative data source for this field.
+ */
+export type DataProvenanceSource =
+  (typeof DataProvenanceSource)[keyof typeof DataProvenanceSource];
+
+export const DataProvenanceSource = {
+  DEFILLAMA_COINS: "DEFILLAMA_COINS",
+  DEFILLAMA_DERIVATIVES: "DEFILLAMA_DERIVATIVES",
+  DEFILLAMA_TVL: "DEFILLAMA_TVL",
+  PYTH_HERMES: "PYTH_HERMES",
+  SYNTHETIC: "SYNTHETIC",
+  DERIVED: "DERIVED",
+  FALLBACK_ZERO: "FALLBACK_ZERO",
+  FALLBACK_ESTIMATED: "FALLBACK_ESTIMATED",
+} as const;
+
+/**
+ * Provenance metadata for a single fetched data field. Records where data came from, when it was fetched, how old the underlying data is, and whether it is considered stale or a fallback value.
+
+ */
+export interface DataProvenance {
+  /** The authoritative data source for this field. */
+  source: DataProvenanceSource;
+  /** When the HTTP request was made. */
+  fetchedAt: string;
+  /** The timestamp embedded in the API response (not our fetch time). */
+  dataTimestamp?: string | null;
+  /** Age of the data in milliseconds at fetch time. */
+  ageMs: number;
+  /** Whether ageMs exceeds the field's stale threshold. */
+  isStale: boolean;
+  /** Whether a fallback value was substituted because the real fetch failed. */
+  isFallback: boolean;
+  /** The threshold used to determine staleness (ms). */
+  stallThresholdMs: number;
+}
+
+export type PythVerifierResultConfidenceStatus =
+  | (typeof PythVerifierResultConfidenceStatus)[keyof typeof PythVerifierResultConfidenceStatus]
+  | null;
+
+export const PythVerifierResultConfidenceStatus = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+/**
+ * CONFIRMS = prices within 0.5% and data fresh. DIVERGES = prices differ by more than 0.5%. UNAVAILABLE = Pyth fetch failed or data stale. SKIPPED = Pyth confidence filter disabled in constraints.
+
+ */
+export type PythVerifierResultVerdict =
+  (typeof PythVerifierResultVerdict)[keyof typeof PythVerifierResultVerdict];
+
+export const PythVerifierResultVerdict = {
+  CONFIRMS: "CONFIRMS",
+  DIVERGES: "DIVERGES",
+  UNAVAILABLE: "UNAVAILABLE",
+  SKIPPED: "SKIPPED",
+} as const;
+
+/**
+ * Scaffolded secondary price-confidence verifier using the Pyth Hermes REST API. When the Pyth confidence filter is enabled in HermesConstraints, this runs on every signal and compares the Pyth spot price against the DefiLlama price. A divergence above 0.5% sets verdict to DIVERGES and adds a quality flag. Confidence ratio below threshold degrades the processVerdict. This is architecturally ready for full integration in the next hardening phase.
+
+ */
+export interface PythVerifierResult {
+  /** Always true — indicates this is a scaffolded integration */
+  scaffolded: boolean;
+  /** Whether a Pyth fetch was actually attempted this cycle */
+  checked: boolean;
+  pythPrice?: number | null;
+  defillamaPrice?: number | null;
+  /** Absolute percentage divergence between Pyth and DefiLlama prices */
+  priceDivergencePct?: number | null;
+  /** Pyth confidence / price — lower is tighter */
+  confidenceRatio?: number | null;
+  confidenceStatus?: PythVerifierResultConfidenceStatus;
+  fresh?: boolean | null;
+  /** CONFIRMS = prices within 0.5% and data fresh. DIVERGES = prices differ by more than 0.5%. UNAVAILABLE = Pyth fetch failed or data stale. SKIPPED = Pyth confidence filter disabled in constraints.
+   */
+  verdict: PythVerifierResultVerdict;
+  /** Human-readable explanation of the verdict. */
+  verdictDetail: string;
+  /** Whether this result is currently affecting processVerdict. */
+  influencesProcessVerdict: boolean;
+}
+
+/**
+ * Canonical data quality and provenance report for a computed signal. Summarises where all input data came from, how fresh it is, what quality flags were raised, and whether the data meets the minimum quality bar for a reliable signal. Signals with CRITICAL grade are forced to WAIT. Signals with POOR grade have degraded confidence.
+
+ */
+export interface DataQualityReport {
+  /** Overall data quality grade derived from the worst flags present. CRITICAL = missing or unavailable price data — forces WAIT. POOR = stale price, fallback used, or insufficient history. DEGRADED = conflicting prices, Pyth divergence, or low confidence. GOOD = all inputs fresh and verified.
+   */
+  grade: DataQualityReportGrade;
+  /** All quality flags raised during this signal computation. */
+  flags: DataQualityReportFlagsItem[];
+  priceProvenance: DataProvenance;
+  historyProvenance: DataProvenance;
+  oiProvenance: DataProvenance;
+  tvlProvenance?: DataProvenance | null;
+  pythVerifier: PythVerifierResult;
+  /** Number of 4H bars available for indicator computation. */
+  historicalBarCount: number;
+  /** Minimum bars required for reliable indicators (currently 50). */
+  minHistoricalBarsRequired: number;
+  /** True if data quality meets the minimum bar for a valid signal. False if the signal was computed on insufficient or missing data.
+   */
+  dataReadyForSignal: boolean;
+  /** Whether confidence score was reduced due to data quality issues. */
+  degradedConfidence: boolean;
+  /** If data quality forced a WAIT outcome, this string explains why. Null when the signal was not forced to WAIT by data quality.
+   */
+  forcedWaitReason?: string | null;
+  computedAt: string;
+}
+
 export type SignalDetail = Signal & {
   marketSnapshot?: MarketSnapshot;
   trendRegime?: TrendRegime;
@@ -305,6 +458,9 @@ export type SignalDetail = Signal & {
   auditReport?: AuditReport;
   preTradChecklist?: PreTradeChecklist;
   outcomeTracking?: OutcomeTracking;
+  /** Data provenance and quality report for this signal. Surfaces source hierarchy, freshness, quality flags, and the Pyth secondary verifier result. Degrade or WAIT signals appear here when data quality falls below threshold.
+   */
+  dataQuality?: DataQualityReport;
 };
 
 export interface WatchlistEntry {

@@ -17,6 +17,7 @@ import {
   DjzsGateBadge,
   RoutingPriorityPanel,
 } from "@/components/signal-process";
+import { DataQualityPanel } from "@/components/data-quality";
 
 function DirectionChip({ direction }: { direction: string }) {
   if (direction === "LONG") return <span className="chip-long">{direction}</span>;
@@ -401,6 +402,11 @@ export default function SignalDetail() {
           </div>
         </div>
       </div>
+
+      {/* ── DATA QUALITY & PROVENANCE ── */}
+      {signal.dataQuality && (
+        <DataQualityPanel dataQuality={signal.dataQuality as Parameters<typeof DataQualityPanel>[0]["dataQuality"]} />
+      )}
 
       {/* ── OUTCOME TRACKING STUB ── */}
       <div className="terminal-panel border-dashed opacity-50">

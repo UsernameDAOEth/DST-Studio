@@ -1,7 +1,16 @@
 import { logger } from "../logger";
+import {
+  DataProvenance,
+  makeProvenance,
+  type DataSource,
+} from "../quality/types";
 
 const DEFILLAMA_BASE = "https://api.llama.fi";
 const COINS_BASE = "https://coins.llama.fi";
+
+export const PRICE_STALE_THRESHOLD_MS = 5 * 60 * 1000;
+export const HISTORY_STALE_THRESHOLD_MS = 60 * 60 * 1000;
+export const MIN_HISTORY_BARS = 50;
 
 export const ASSET_MAP: Record<string, { coingeckoId: string; llamaId: string; name: string }> = {
   ETH: { coingeckoId: "ethereum", llamaId: "coingecko:ethereum", name: "Ethereum" },
@@ -19,6 +28,8 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// ── Raw types returned by the API ─────────────────────────────────────────────
+
 export interface CoinPrice {
   price: number;
   symbol: string;
@@ -26,27 +37,130 @@ export interface CoinPrice {
   confidence: number;
 }
 
-export async function getCurrentPrices(assets: string[]): Promise<Record<string, CoinPrice>> {
+// ── Normalized price result with provenance ───────────────────────────────────
+
+export interface NormalizedPriceResult {
+  asset: string;
+  price: number;
+  symbol: string;
+  apiConfidence: number;
+  provenance: DataProvenance;
+  missing: boolean;
+}
+
+export interface NormalizedHistoryResult {
+  asset: string;
+  prices: HistoricalPrice[];
+  barCount: number;
+  provenance: DataProvenance;
+  missing: boolean;
+  insufficient: boolean;
+}
+
+// ── Price fetching ────────────────────────────────────────────────────────────
+
+export async function getCurrentPricesWithProvenance(
+  assets: string[]
+): Promise<Record<string, NormalizedPriceResult>> {
+  const fetchedAt = new Date();
   const coins = assets.map((a) => ASSET_MAP[a]?.llamaId).filter(Boolean).join(",");
-  const data = await fetchJson<{ coins: Record<string, CoinPrice> }>(`${COINS_BASE}/prices/current/${coins}`);
-  const result: Record<string, CoinPrice> = {};
+  const result: Record<string, NormalizedPriceResult> = {};
+
+  let rawCoins: Record<string, CoinPrice> = {};
+  let fetchFailed = false;
+
+  try {
+    const data = await fetchJson<{ coins: Record<string, CoinPrice> }>(
+      `${COINS_BASE}/prices/current/${coins}`
+    );
+    rawCoins = data.coins ?? {};
+  } catch (err) {
+    logger.warn({ err, assets }, "getCurrentPricesWithProvenance: fetch failed, returning fallback zeros");
+    fetchFailed = true;
+  }
+
   for (const asset of assets) {
     const llamaId = ASSET_MAP[asset]?.llamaId;
-    if (llamaId && data.coins[llamaId]) {
-      result[asset] = data.coins[llamaId];
+    const raw = llamaId ? rawCoins[llamaId] : undefined;
+
+    if (fetchFailed || !raw || typeof raw.price !== "number" || raw.price <= 0) {
+      result[asset] = {
+        asset,
+        price: 0,
+        symbol: asset,
+        apiConfidence: 0,
+        provenance: makeProvenance(
+          fetchFailed ? ("FALLBACK_ZERO" as DataSource) : ("DEFILLAMA_COINS" as DataSource),
+          fetchedAt,
+          null,
+          PRICE_STALE_THRESHOLD_MS,
+          true,
+        ),
+        missing: true,
+      };
+    } else {
+      const dataTimestampMs = raw.timestamp ? raw.timestamp * 1000 : null;
+      result[asset] = {
+        asset,
+        price: raw.price,
+        symbol: raw.symbol ?? asset,
+        apiConfidence: raw.confidence ?? 0,
+        provenance: makeProvenance(
+          "DEFILLAMA_COINS",
+          fetchedAt,
+          dataTimestampMs,
+          PRICE_STALE_THRESHOLD_MS,
+          false,
+        ),
+        missing: false,
+      };
+    }
+  }
+
+  return result;
+}
+
+export async function getCurrentPrices(assets: string[]): Promise<Record<string, CoinPrice>> {
+  const normalized = await getCurrentPricesWithProvenance(assets);
+  const result: Record<string, CoinPrice> = {};
+  for (const [asset, n] of Object.entries(normalized)) {
+    if (!n.missing) {
+      result[asset] = {
+        price: n.price,
+        symbol: n.symbol,
+        timestamp: n.provenance.dataTimestamp
+          ? new Date(n.provenance.dataTimestamp).getTime() / 1000
+          : Date.now() / 1000,
+        confidence: n.apiConfidence,
+      };
     }
   }
   return result;
 }
+
+// ── Historical prices ─────────────────────────────────────────────────────────
 
 export interface HistoricalPrice {
   timestamp: number;
   price: number;
 }
 
-export async function getHistoricalPrices(asset: string, spanHours = 200): Promise<HistoricalPrice[]> {
+export async function getHistoricalPricesWithProvenance(
+  asset: string,
+  spanHours = 200
+): Promise<NormalizedHistoryResult> {
+  const fetchedAt = new Date();
   const llamaId = ASSET_MAP[asset]?.llamaId;
-  if (!llamaId) throw new Error(`Unknown asset: ${asset}`);
+  if (!llamaId) {
+    return {
+      asset,
+      prices: [],
+      barCount: 0,
+      provenance: makeProvenance("FALLBACK_ZERO", fetchedAt, null, HISTORY_STALE_THRESHOLD_MS, true),
+      missing: true,
+      insufficient: true,
+    };
+  }
 
   const end = Math.floor(Date.now() / 1000);
   const start = end - spanHours * 3600;
@@ -56,20 +170,53 @@ export async function getHistoricalPrices(asset: string, spanHours = 200): Promi
     const data = await fetchJson<{ coins: Record<string, { prices: HistoricalPrice[] }> }>(
       `${COINS_BASE}/chart/${llamaId}?start=${start}&span=${Math.ceil(spanHours / 4)}&period=${period}`
     );
-    return data.coins[llamaId]?.prices ?? [];
+    const prices = data.coins[llamaId]?.prices ?? [];
+    const lastTs = prices.length > 0 ? prices[prices.length - 1].timestamp * 1000 : null;
+
+    return {
+      asset,
+      prices,
+      barCount: prices.length,
+      provenance: makeProvenance(
+        "DEFILLAMA_COINS",
+        fetchedAt,
+        lastTs,
+        HISTORY_STALE_THRESHOLD_MS,
+        false,
+      ),
+      missing: prices.length === 0,
+      insufficient: prices.length < MIN_HISTORY_BARS,
+    };
   } catch (err) {
-    logger.warn({ err, asset }, "Failed to fetch historical prices, returning empty");
-    return [];
+    logger.warn({ err, asset }, "getHistoricalPricesWithProvenance: failed, returning empty");
+    return {
+      asset,
+      prices: [],
+      barCount: 0,
+      provenance: makeProvenance("FALLBACK_ZERO", fetchedAt, null, HISTORY_STALE_THRESHOLD_MS, true),
+      missing: true,
+      insufficient: true,
+    };
   }
 }
 
-export interface GlobalData {
+export async function getHistoricalPrices(asset: string, spanHours = 200): Promise<HistoricalPrice[]> {
+  const result = await getHistoricalPricesWithProvenance(asset, spanHours);
+  return result.prices;
+}
+
+// ── Derivatives / global data ─────────────────────────────────────────────────
+
+export interface GlobalDataResult {
   totalLiquidationsUsd: number;
   totalOpenInterestUsd: number;
   fundingRate?: number;
+  provenance: DataProvenance;
+  missing: boolean;
 }
 
-export async function getGlobalDerivativeData(): Promise<GlobalData> {
+export async function getGlobalDerivativeData(): Promise<GlobalDataResult> {
+  const fetchedAt = new Date();
   try {
     const data = await fetchJson<{
       totalLiquidations: { currentDayLiquidations: number };
@@ -78,31 +225,62 @@ export async function getGlobalDerivativeData(): Promise<GlobalData> {
     return {
       totalLiquidationsUsd: data.totalLiquidations?.currentDayLiquidations ?? 0,
       totalOpenInterestUsd: data.totalOpenInterest ?? 0,
+      provenance: makeProvenance("DEFILLAMA_DERIVATIVES", fetchedAt, null, PRICE_STALE_THRESHOLD_MS, false),
+      missing: false,
     };
   } catch (err) {
-    logger.warn({ err }, "Failed to fetch derivatives overview");
-    return { totalLiquidationsUsd: 0, totalOpenInterestUsd: 0 };
+    logger.warn({ err }, "getGlobalDerivativeData: failed, returning zeros");
+    return {
+      totalLiquidationsUsd: 0,
+      totalOpenInterestUsd: 0,
+      provenance: makeProvenance("FALLBACK_ZERO", fetchedAt, null, PRICE_STALE_THRESHOLD_MS, true),
+      missing: true,
+    };
   }
 }
 
-export interface ProtocolTvl {
+// ── TVL ───────────────────────────────────────────────────────────────────────
+
+export interface TvlResult {
   tvl: number;
-  change_1d?: number;
-  change_7d?: number;
+  provenance: DataProvenance;
+  missing: boolean;
+}
+
+export async function getTvlForAssetWithProvenance(asset: string): Promise<TvlResult> {
+  const fetchedAt = new Date();
+  const slugMap: Record<string, string> = { ETH: "ethereum", BTC: "bitcoin", SOL: "solana" };
+  const slug = slugMap[asset];
+  if (!slug) {
+    return {
+      tvl: 0,
+      provenance: makeProvenance("FALLBACK_ZERO", fetchedAt, null, PRICE_STALE_THRESHOLD_MS, true),
+      missing: true,
+    };
+  }
+  try {
+    const data = await fetchJson<{ tvl: number }>(`${DEFILLAMA_BASE}/tvl/${slug}`);
+    return {
+      tvl: typeof data?.tvl === "number" ? data.tvl : 0,
+      provenance: makeProvenance("DEFILLAMA_TVL", fetchedAt, null, PRICE_STALE_THRESHOLD_MS, false),
+      missing: typeof data?.tvl !== "number",
+    };
+  } catch (err) {
+    logger.warn({ err, asset }, "getTvlForAsset: failed, returning zero");
+    return {
+      tvl: 0,
+      provenance: makeProvenance("FALLBACK_ZERO", fetchedAt, null, PRICE_STALE_THRESHOLD_MS, true),
+      missing: true,
+    };
+  }
 }
 
 export async function getTvlForAsset(asset: string): Promise<number> {
-  const slugMap: Record<string, string> = { ETH: "ethereum", BTC: "bitcoin", SOL: "solana" };
-  const slug = slugMap[asset];
-  if (!slug) return 0;
-  try {
-    const data = await fetchJson<{ tvl: number }>(`${DEFILLAMA_BASE}/tvl/${slug}`);
-    return typeof data?.tvl === "number" ? data.tvl : 0;
-  } catch (err) {
-    logger.warn({ err, asset }, "Failed to fetch TVL");
-    return 0;
-  }
+  const result = await getTvlForAssetWithProvenance(asset);
+  return result.tvl;
 }
+
+// ── Market cap (derived from fixed supply constants) ──────────────────────────
 
 export async function getMarketCapFromPrices(asset: string, price: number): Promise<number> {
   const supplyMap: Record<string, number> = {
@@ -111,4 +289,10 @@ export async function getMarketCapFromPrices(asset: string, price: number): Prom
     SOL: 465_000_000,
   };
   return (supplyMap[asset] ?? 0) * price;
+}
+
+export interface ProtocolTvl {
+  tvl: number;
+  change_1d?: number;
+  change_7d?: number;
 }

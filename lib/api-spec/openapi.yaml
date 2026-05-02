@@ -560,10 +560,15 @@ components:
             type: string
           description: >
             Machine-readable codes for why the setup was rejected or degraded.
-            Possible values: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID,
+            Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID,
             TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS,
             CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD,
             CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY.
+            Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard
+            WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes —
+            degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars —
+            indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero
+            used as fallback — hard WAIT).
         processQualityGrade:
           type: string
           enum: [A, B, C, D, F]
@@ -624,6 +629,13 @@ components:
               $ref: "#/components/schemas/PreTradeChecklist"
             outcomeTracking:
               $ref: "#/components/schemas/OutcomeTracking"
+            dataQuality:
+              $ref: "#/components/schemas/DataQualityReport"
+              description: >
+                Data provenance and quality report for this signal. Surfaces
+                source hierarchy, freshness, quality flags, and the Pyth
+                secondary verifier result. Degrade or WAIT signals appear here
+                when data quality falls below threshold.
 
     PreTradeChecklist:
       type: object
@@ -1442,3 +1454,196 @@ components:
         - slotAge
         - fresh
         - influencesProcessVerdict
+
+    DataProvenance:
+      type: object
+      description: >
+        Provenance metadata for a single fetched data field. Records where
+        data came from, when it was fetched, how old the underlying data is,
+        and whether it is considered stale or a fallback value.
+      properties:
+        source:
+          type: string
+          enum:
+            - DEFILLAMA_COINS
+            - DEFILLAMA_DERIVATIVES
+            - DEFILLAMA_TVL
+            - PYTH_HERMES
+            - SYNTHETIC
+            - DERIVED
+            - FALLBACK_ZERO
+            - FALLBACK_ESTIMATED
+          description: The authoritative data source for this field.
+        fetchedAt:
+          type: string
+          format: date-time
+          description: When the HTTP request was made.
+        dataTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: The timestamp embedded in the API response (not our fetch time).
+        ageMs:
+          type: integer
+          description: Age of the data in milliseconds at fetch time.
+        isStale:
+          type: boolean
+          description: Whether ageMs exceeds the field's stale threshold.
+        isFallback:
+          type: boolean
+          description: Whether a fallback value was substituted because the real fetch failed.
+        stallThresholdMs:
+          type: integer
+          description: The threshold used to determine staleness (ms).
+      required:
+        - source
+        - fetchedAt
+        - ageMs
+        - isStale
+        - isFallback
+        - stallThresholdMs
+
+    PythVerifierResult:
+      type: object
+      description: >
+        Scaffolded secondary price-confidence verifier using the Pyth Hermes
+        REST API. When the Pyth confidence filter is enabled in HermesConstraints,
+        this runs on every signal and compares the Pyth spot price against the
+        DefiLlama price. A divergence above 0.5% sets verdict to DIVERGES and
+        adds a quality flag. Confidence ratio below threshold degrades the
+        processVerdict. This is architecturally ready for full integration in the
+        next hardening phase.
+      properties:
+        scaffolded:
+          type: boolean
+          description: Always true — indicates this is a scaffolded integration
+        checked:
+          type: boolean
+          description: Whether a Pyth fetch was actually attempted this cycle
+        pythPrice:
+          type: number
+          nullable: true
+        defillamaPrice:
+          type: number
+          nullable: true
+        priceDivergencePct:
+          type: number
+          nullable: true
+          description: Absolute percentage divergence between Pyth and DefiLlama prices
+        confidenceRatio:
+          type: number
+          nullable: true
+          description: Pyth confidence / price — lower is tighter
+        confidenceStatus:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          nullable: true
+        fresh:
+          type: boolean
+          nullable: true
+        verdict:
+          type: string
+          enum: [CONFIRMS, DIVERGES, UNAVAILABLE, SKIPPED]
+          description: >
+            CONFIRMS = prices within 0.5% and data fresh.
+            DIVERGES = prices differ by more than 0.5%.
+            UNAVAILABLE = Pyth fetch failed or data stale.
+            SKIPPED = Pyth confidence filter disabled in constraints.
+        verdictDetail:
+          type: string
+          description: Human-readable explanation of the verdict.
+        influencesProcessVerdict:
+          type: boolean
+          description: Whether this result is currently affecting processVerdict.
+      required:
+        - scaffolded
+        - checked
+        - verdict
+        - verdictDetail
+        - influencesProcessVerdict
+
+    DataQualityReport:
+      type: object
+      description: >
+        Canonical data quality and provenance report for a computed signal.
+        Summarises where all input data came from, how fresh it is, what quality
+        flags were raised, and whether the data meets the minimum quality bar
+        for a reliable signal. Signals with CRITICAL grade are forced to WAIT.
+        Signals with POOR grade have degraded confidence.
+      properties:
+        grade:
+          type: string
+          enum: [GOOD, DEGRADED, POOR, CRITICAL]
+          description: >
+            Overall data quality grade derived from the worst flags present.
+            CRITICAL = missing or unavailable price data — forces WAIT.
+            POOR = stale price, fallback used, or insufficient history.
+            DEGRADED = conflicting prices, Pyth divergence, or low confidence.
+            GOOD = all inputs fresh and verified.
+        flags:
+          type: array
+          items:
+            type: string
+            enum:
+              - STALE_PRICE
+              - STALE_HISTORY
+              - MISSING_PRICE
+              - MISSING_HISTORY
+              - INSUFFICIENT_HISTORY
+              - FALLBACK_PRICE_USED
+              - SYNTHETIC_OI
+              - SYNTHETIC_FUNDING
+              - LOW_CONFIDENCE
+              - CONFLICTING_PRICES
+              - PYTH_DIVERGENCE
+              - PYTH_UNAVAILABLE
+              - TVL_MISSING
+              - VOLUME_MISSING
+              - DATA_UNAVAILABLE
+          description: All quality flags raised during this signal computation.
+        priceProvenance:
+          $ref: "#/components/schemas/DataProvenance"
+        historyProvenance:
+          $ref: "#/components/schemas/DataProvenance"
+        oiProvenance:
+          $ref: "#/components/schemas/DataProvenance"
+        tvlProvenance:
+          $ref: "#/components/schemas/DataProvenance"
+          nullable: true
+        pythVerifier:
+          $ref: "#/components/schemas/PythVerifierResult"
+        historicalBarCount:
+          type: integer
+          description: Number of 4H bars available for indicator computation.
+        minHistoricalBarsRequired:
+          type: integer
+          description: Minimum bars required for reliable indicators (currently 50).
+        dataReadyForSignal:
+          type: boolean
+          description: >
+            True if data quality meets the minimum bar for a valid signal.
+            False if the signal was computed on insufficient or missing data.
+        degradedConfidence:
+          type: boolean
+          description: Whether confidence score was reduced due to data quality issues.
+        forcedWaitReason:
+          type: string
+          nullable: true
+          description: >
+            If data quality forced a WAIT outcome, this string explains why.
+            Null when the signal was not forced to WAIT by data quality.
+        computedAt:
+          type: string
+          format: date-time
+      required:
+        - grade
+        - flags
+        - priceProvenance
+        - historyProvenance
+        - oiProvenance
+        - pythVerifier
+        - historicalBarCount
+        - minHistoricalBarsRequired
+        - dataReadyForSignal
+        - degradedConfidence
+        - computedAt

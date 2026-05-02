@@ -85,7 +85,7 @@ export default function Hermes() {
   };
 
   const handleTrigger = () => {
-    triggerScan.mutate({}, {
+    triggerScan.mutate(undefined as never, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetHermesStatusQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetHermesJobsQueryKey() });

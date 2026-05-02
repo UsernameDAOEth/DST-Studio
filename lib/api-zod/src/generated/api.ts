@@ -93,7 +93,7 @@ export const GetSignalsResponseItem = zod
     rejectionCodes: zod
       .array(zod.string())
       .describe(
-        "Machine-readable codes for why the setup was rejected or degraded. Possible values: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY.\n",
+        "Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY. Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT).\n",
       ),
     processQualityGrade: zod
       .enum(["A", "B", "C", "D", "F"])
@@ -185,7 +185,7 @@ export const GetSignalByAssetResponse = zod
     rejectionCodes: zod
       .array(zod.string())
       .describe(
-        "Machine-readable codes for why the setup was rejected or degraded. Possible values: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY.\n",
+        "Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY. Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT).\n",
       ),
     processQualityGrade: zod
       .enum(["A", "B", "C", "D", "F"])
@@ -295,6 +295,274 @@ export const GetSignalByAssetResponse = zod
         .optional()
         .describe(
           "Scaffolded outcome tracking for process-vs-outcome separation. All fields null until outcome tracking is enabled in a future phase.\n",
+        ),
+      dataQuality: zod
+        .object({
+          grade: zod
+            .enum(["GOOD", "DEGRADED", "POOR", "CRITICAL"])
+            .describe(
+              "Overall data quality grade derived from the worst flags present. CRITICAL = missing or unavailable price data — forces WAIT. POOR = stale price, fallback used, or insufficient history. DEGRADED = conflicting prices, Pyth divergence, or low confidence. GOOD = all inputs fresh and verified.\n",
+            ),
+          flags: zod
+            .array(
+              zod.enum([
+                "STALE_PRICE",
+                "STALE_HISTORY",
+                "MISSING_PRICE",
+                "MISSING_HISTORY",
+                "INSUFFICIENT_HISTORY",
+                "FALLBACK_PRICE_USED",
+                "SYNTHETIC_OI",
+                "SYNTHETIC_FUNDING",
+                "LOW_CONFIDENCE",
+                "CONFLICTING_PRICES",
+                "PYTH_DIVERGENCE",
+                "PYTH_UNAVAILABLE",
+                "TVL_MISSING",
+                "VOLUME_MISSING",
+                "DATA_UNAVAILABLE",
+              ]),
+            )
+            .describe(
+              "All quality flags raised during this signal computation.",
+            ),
+          priceProvenance: zod
+            .object({
+              source: zod
+                .enum([
+                  "DEFILLAMA_COINS",
+                  "DEFILLAMA_DERIVATIVES",
+                  "DEFILLAMA_TVL",
+                  "PYTH_HERMES",
+                  "SYNTHETIC",
+                  "DERIVED",
+                  "FALLBACK_ZERO",
+                  "FALLBACK_ESTIMATED",
+                ])
+                .describe("The authoritative data source for this field."),
+              fetchedAt: zod.coerce
+                .date()
+                .describe("When the HTTP request was made."),
+              dataTimestamp: zod.coerce
+                .date()
+                .nullish()
+                .describe(
+                  "The timestamp embedded in the API response (not our fetch time).",
+                ),
+              ageMs: zod
+                .number()
+                .describe("Age of the data in milliseconds at fetch time."),
+              isStale: zod
+                .boolean()
+                .describe("Whether ageMs exceeds the field's stale threshold."),
+              isFallback: zod
+                .boolean()
+                .describe(
+                  "Whether a fallback value was substituted because the real fetch failed.",
+                ),
+              stallThresholdMs: zod
+                .number()
+                .describe("The threshold used to determine staleness (ms)."),
+            })
+            .describe(
+              "Provenance metadata for a single fetched data field. Records where data came from, when it was fetched, how old the underlying data is, and whether it is considered stale or a fallback value.\n",
+            ),
+          historyProvenance: zod
+            .object({
+              source: zod
+                .enum([
+                  "DEFILLAMA_COINS",
+                  "DEFILLAMA_DERIVATIVES",
+                  "DEFILLAMA_TVL",
+                  "PYTH_HERMES",
+                  "SYNTHETIC",
+                  "DERIVED",
+                  "FALLBACK_ZERO",
+                  "FALLBACK_ESTIMATED",
+                ])
+                .describe("The authoritative data source for this field."),
+              fetchedAt: zod.coerce
+                .date()
+                .describe("When the HTTP request was made."),
+              dataTimestamp: zod.coerce
+                .date()
+                .nullish()
+                .describe(
+                  "The timestamp embedded in the API response (not our fetch time).",
+                ),
+              ageMs: zod
+                .number()
+                .describe("Age of the data in milliseconds at fetch time."),
+              isStale: zod
+                .boolean()
+                .describe("Whether ageMs exceeds the field's stale threshold."),
+              isFallback: zod
+                .boolean()
+                .describe(
+                  "Whether a fallback value was substituted because the real fetch failed.",
+                ),
+              stallThresholdMs: zod
+                .number()
+                .describe("The threshold used to determine staleness (ms)."),
+            })
+            .describe(
+              "Provenance metadata for a single fetched data field. Records where data came from, when it was fetched, how old the underlying data is, and whether it is considered stale or a fallback value.\n",
+            ),
+          oiProvenance: zod
+            .object({
+              source: zod
+                .enum([
+                  "DEFILLAMA_COINS",
+                  "DEFILLAMA_DERIVATIVES",
+                  "DEFILLAMA_TVL",
+                  "PYTH_HERMES",
+                  "SYNTHETIC",
+                  "DERIVED",
+                  "FALLBACK_ZERO",
+                  "FALLBACK_ESTIMATED",
+                ])
+                .describe("The authoritative data source for this field."),
+              fetchedAt: zod.coerce
+                .date()
+                .describe("When the HTTP request was made."),
+              dataTimestamp: zod.coerce
+                .date()
+                .nullish()
+                .describe(
+                  "The timestamp embedded in the API response (not our fetch time).",
+                ),
+              ageMs: zod
+                .number()
+                .describe("Age of the data in milliseconds at fetch time."),
+              isStale: zod
+                .boolean()
+                .describe("Whether ageMs exceeds the field's stale threshold."),
+              isFallback: zod
+                .boolean()
+                .describe(
+                  "Whether a fallback value was substituted because the real fetch failed.",
+                ),
+              stallThresholdMs: zod
+                .number()
+                .describe("The threshold used to determine staleness (ms)."),
+            })
+            .describe(
+              "Provenance metadata for a single fetched data field. Records where data came from, when it was fetched, how old the underlying data is, and whether it is considered stale or a fallback value.\n",
+            ),
+          tvlProvenance: zod
+            .object({
+              source: zod
+                .enum([
+                  "DEFILLAMA_COINS",
+                  "DEFILLAMA_DERIVATIVES",
+                  "DEFILLAMA_TVL",
+                  "PYTH_HERMES",
+                  "SYNTHETIC",
+                  "DERIVED",
+                  "FALLBACK_ZERO",
+                  "FALLBACK_ESTIMATED",
+                ])
+                .describe("The authoritative data source for this field."),
+              fetchedAt: zod.coerce
+                .date()
+                .describe("When the HTTP request was made."),
+              dataTimestamp: zod.coerce
+                .date()
+                .nullish()
+                .describe(
+                  "The timestamp embedded in the API response (not our fetch time).",
+                ),
+              ageMs: zod
+                .number()
+                .describe("Age of the data in milliseconds at fetch time."),
+              isStale: zod
+                .boolean()
+                .describe("Whether ageMs exceeds the field's stale threshold."),
+              isFallback: zod
+                .boolean()
+                .describe(
+                  "Whether a fallback value was substituted because the real fetch failed.",
+                ),
+              stallThresholdMs: zod
+                .number()
+                .describe("The threshold used to determine staleness (ms)."),
+            })
+            .nullish()
+            .describe(
+              "Provenance metadata for a single fetched data field. Records where data came from, when it was fetched, how old the underlying data is, and whether it is considered stale or a fallback value.\n",
+            ),
+          pythVerifier: zod
+            .object({
+              scaffolded: zod
+                .boolean()
+                .describe(
+                  "Always true — indicates this is a scaffolded integration",
+                ),
+              checked: zod
+                .boolean()
+                .describe(
+                  "Whether a Pyth fetch was actually attempted this cycle",
+                ),
+              pythPrice: zod.number().nullish(),
+              defillamaPrice: zod.number().nullish(),
+              priceDivergencePct: zod
+                .number()
+                .nullish()
+                .describe(
+                  "Absolute percentage divergence between Pyth and DefiLlama prices",
+                ),
+              confidenceRatio: zod
+                .number()
+                .nullish()
+                .describe("Pyth confidence \/ price — lower is tighter"),
+              confidenceStatus: zod.enum(["HIGH", "MEDIUM", "LOW"]).nullish(),
+              fresh: zod.boolean().nullish(),
+              verdict: zod
+                .enum(["CONFIRMS", "DIVERGES", "UNAVAILABLE", "SKIPPED"])
+                .describe(
+                  "CONFIRMS = prices within 0.5% and data fresh. DIVERGES = prices differ by more than 0.5%. UNAVAILABLE = Pyth fetch failed or data stale. SKIPPED = Pyth confidence filter disabled in constraints.\n",
+                ),
+              verdictDetail: zod
+                .string()
+                .describe("Human-readable explanation of the verdict."),
+              influencesProcessVerdict: zod
+                .boolean()
+                .describe(
+                  "Whether this result is currently affecting processVerdict.",
+                ),
+            })
+            .describe(
+              "Scaffolded secondary price-confidence verifier using the Pyth Hermes REST API. When the Pyth confidence filter is enabled in HermesConstraints, this runs on every signal and compares the Pyth spot price against the DefiLlama price. A divergence above 0.5% sets verdict to DIVERGES and adds a quality flag. Confidence ratio below threshold degrades the processVerdict. This is architecturally ready for full integration in the next hardening phase.\n",
+            ),
+          historicalBarCount: zod
+            .number()
+            .describe("Number of 4H bars available for indicator computation."),
+          minHistoricalBarsRequired: zod
+            .number()
+            .describe(
+              "Minimum bars required for reliable indicators (currently 50).",
+            ),
+          dataReadyForSignal: zod
+            .boolean()
+            .describe(
+              "True if data quality meets the minimum bar for a valid signal. False if the signal was computed on insufficient or missing data.\n",
+            ),
+          degradedConfidence: zod
+            .boolean()
+            .describe(
+              "Whether confidence score was reduced due to data quality issues.",
+            ),
+          forcedWaitReason: zod
+            .string()
+            .nullish()
+            .describe(
+              "If data quality forced a WAIT outcome, this string explains why. Null when the signal was not forced to WAIT by data quality.\n",
+            ),
+          computedAt: zod.coerce.date(),
+        })
+        .optional()
+        .describe(
+          "Data provenance and quality report for this signal. Surfaces source hierarchy, freshness, quality flags, and the Pyth secondary verifier result. Degrade or WAIT signals appear here when data quality falls below threshold.\n",
         ),
     }),
   );

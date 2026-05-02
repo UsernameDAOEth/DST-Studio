@@ -1,16 +1,27 @@
 import { logger } from "../logger";
 import {
-  getCurrentPrices,
-  getHistoricalPrices,
-  getTvlForAsset,
-  getMarketCapFromPrices,
+  getCurrentPricesWithProvenance,
+  getHistoricalPricesWithProvenance,
+  getTvlForAssetWithProvenance,
   getGlobalDerivativeData,
+  getMarketCapFromPrices,
   ASSET_MAP,
+  MIN_HISTORY_BARS,
+  PRICE_STALE_THRESHOLD_MS,
   type HistoricalPrice,
 } from "./defillamaClient";
 import { lastEma, rsi, macd, atr } from "./indicators";
 import { getConstraints } from "../hermes/constraints";
 import { fetchPythPrice } from "../pyth/pythClient";
+import {
+  type DataQualityReport,
+  type QualityFlag,
+  type PythVerifierResult,
+  makeProvenance,
+  computeDataQualityGrade,
+  makePythVerifierUnavailable,
+  makePythVerifierSkipped,
+} from "../quality/types";
 
 export type Direction = "LONG" | "SHORT" | "WAIT";
 export type Verdict = "PASS" | "FAIL" | "WAIT";
@@ -37,7 +48,11 @@ export type RejectionCode =
   | "RR_BELOW_THRESHOLD"
   | "CONFIDENCE_STRUCTURE_MISMATCH"
   | "UNDEFINED_REGIME"
-  | "RANGE_SECONDARY";
+  | "RANGE_SECONDARY"
+  | "DATA_UNAVAILABLE"
+  | "STALE_PRICE"
+  | "INSUFFICIENT_HISTORY"
+  | "FALLBACK_PRICE_USED";
 
 export interface PreTradeChecklist {
   thesis: string;
@@ -139,7 +154,10 @@ export interface ComputedSignal {
   processQualityGrade: ProcessQualityGrade;
   preTradChecklist: PreTradeChecklist;
   outcomeTracking: OutcomeTracking;
+  dataQuality: DataQualityReport;
 }
+
+// ── Pure helper functions (unchanged) ─────────────────────────────────────────
 
 function deriveRegime(ema9: number, ema21: number, ema50: number, rsiVal: number): Regime {
   const bullish = ema9 > ema21 && ema21 > ema50 && rsiVal > 50;
@@ -276,12 +294,12 @@ function classifySetupFamily(regime: Regime, direction: Direction): SetupFamily 
   return "NO_SETUP";
 }
 
-function assessEntryQuality(currentPrice: number, ema9: number, atr: number, direction: Direction, lateEntryAtrMultiplier = 1.5): EntryQuality {
-  if (ema9 === 0 || atr === 0) return "INVALID";
-  if (direction === "LONG" && currentPrice > ema9 + lateEntryAtrMultiplier * atr) return "LATE";
-  if (direction === "SHORT" && currentPrice < ema9 - lateEntryAtrMultiplier * atr) return "LATE";
-  
-  const entryZoneRange = 0.3 * atr;
+function assessEntryQuality(currentPrice: number, ema9: number, atrVal: number, direction: Direction, lateEntryAtrMultiplier = 1.5): EntryQuality {
+  if (ema9 === 0 || atrVal === 0) return "INVALID";
+  if (direction === "LONG" && currentPrice > ema9 + lateEntryAtrMultiplier * atrVal) return "LATE";
+  if (direction === "SHORT" && currentPrice < ema9 - lateEntryAtrMultiplier * atrVal) return "LATE";
+
+  const entryZoneRange = 0.3 * atrVal;
   if (direction === "LONG") {
     if (Math.abs(currentPrice - ema9) <= entryZoneRange) return "OPTIMAL";
   } else if (direction === "SHORT") {
@@ -313,13 +331,13 @@ function computeRR(entryZoneHigh: number, entryZoneLow: number, targetZone: numb
   return Math.max(0, rr);
 }
 
-function buildRejectConditions(asset: string, regime: Regime, ema50: number, atr: number, invalidationPrice: number): string[] {
+function buildRejectConditions(asset: string, regime: Regime, ema50: number, atrVal: number, invalidationPrice: number): string[] {
   return [
     `Price closes below EMA50 ($${ema50.toFixed(2)})`,
-    `ATR expands > 2x current ($${(atr * 2).toFixed(2)}) without breakout`,
+    `ATR expands > 2x current ($${(atrVal * 2).toFixed(2)}) without breakout`,
     "OI drops > 15% in single 4H candle",
     "Regime shifts to RANGING or UNDEFINED",
-    `Invalidation level ($${invalidationPrice.toFixed(2)}) is breached on close`
+    `Invalidation level ($${invalidationPrice.toFixed(2)}) is breached on close`,
   ];
 }
 
@@ -327,10 +345,16 @@ function generateThesis(asset: string, direction: Direction, regime: Regime, set
   if (direction === "WAIT") {
     return `WAIT on ${asset}: Regime ${regime.toLowerCase()}, insufficient structural alignment for any setup family.`;
   }
-  return `${setupFamily} on ${asset}: ${regime} regime confirmed with EMA stack (${ema9.toFixed(1)}<${ema21.toFixed(1)}<${ema50.toFixed(1)}), RSI at ${rsiVal.toFixed(1)} with ${macdHist > 0 ? 'positive' : 'negative'} MACD histogram supporting ${direction.toLowerCase()} continuation.`;
+  return `${setupFamily} on ${asset}: ${regime} regime confirmed with EMA stack (${ema9.toFixed(1)}<${ema21.toFixed(1)}<${ema50.toFixed(1)}), RSI at ${rsiVal.toFixed(1)} with ${macdHist > 0 ? "positive" : "negative"} MACD histogram supporting ${direction.toLowerCase()} continuation.`;
 }
 
 function generateWhyTrade(direction: Direction, processVerdict: ProcessVerdict, rejectionCodes: RejectionCode[], setupFamily: SetupFamily, rrRatio: number, entryQuality: EntryQuality): string {
+  if (rejectionCodes.includes("DATA_UNAVAILABLE") || rejectionCodes.includes("STALE_PRICE")) {
+    return "Input data quality is insufficient for a reliable signal. Waiting for fresh, verified data before committing to any direction.";
+  }
+  if (rejectionCodes.includes("INSUFFICIENT_HISTORY")) {
+    return "Insufficient historical bar count to compute reliable indicators. Signal deferred to WAIT until at least 50 bars of data are available.";
+  }
   if (processVerdict === "REJECTED") {
     return `Trade rejected due to: ${rejectionCodes.join(", ")}. Does not meet strict pre-trade discipline requirements.`;
   }
@@ -341,19 +365,19 @@ function generateWhyTrade(direction: Direction, processVerdict: ProcessVerdict, 
 }
 
 function computeProcessVerdict(rejectionCodes: RejectionCode[], entryQuality: EntryQuality, logicAdmissibility: LogicAdmissibility, narrativeRisk: NarrativeRisk, rrRatio: number): ProcessVerdict {
-  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD"];
+  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD", "DATA_UNAVAILABLE"];
   if (rejectionCodes.some(c => hardRejections.includes(c))) return "REJECTED";
-  
-  const degradedCodes: RejectionCode[] = ["ENTRY_TOO_LATE", "NARRATIVE_HEAVY", "CROWDING_TOO_HIGH", "RANGE_SECONDARY", "CONFIDENCE_STRUCTURE_MISMATCH"];
+
+  const degradedCodes: RejectionCode[] = ["ENTRY_TOO_LATE", "NARRATIVE_HEAVY", "CROWDING_TOO_HIGH", "RANGE_SECONDARY", "CONFIDENCE_STRUCTURE_MISMATCH", "STALE_PRICE", "INSUFFICIENT_HISTORY", "FALLBACK_PRICE_USED"];
   if (rejectionCodes.some(c => degradedCodes.includes(c))) return "DEGRADED";
 
   if (rejectionCodes.length === 0 && (entryQuality === "OPTIMAL" || entryQuality === "ACCEPTABLE") && rrRatio >= 1.5) return "APPROVED";
-  
+
   return "REJECTED";
 }
 
 function computeLogicAdmissibility(processVerdict: ProcessVerdict, auditVerdict: Verdict, rejectionCodes: RejectionCode[]): LogicAdmissibility {
-  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD"];
+  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD", "DATA_UNAVAILABLE"];
   if (processVerdict === "REJECTED" || rejectionCodes.some(c => hardRejections.includes(c))) return "INADMISSIBLE";
   if (processVerdict === "DEGRADED" || auditVerdict === "WAIT") return "CONDITIONAL";
   if (processVerdict === "APPROVED" && auditVerdict === "PASS") return "ADMISSIBLE";
@@ -395,26 +419,63 @@ function buildPreTradeChecklist(thesis: string, regime: Regime, entryZoneLow: nu
   };
 }
 
+// ── Main signal computation ───────────────────────────────────────────────────
+
 export async function computeSignal(asset: string, timeframe = "4H"): Promise<ComputedSignal> {
   const constraints = getConstraints();
   const startMs = Date.now();
   logger.info({ asset, timeframe }, "Computing signal");
 
-  const [prices, historical, tvl, globalData] = await Promise.allSettled([
-    getCurrentPrices([asset]),
-    getHistoricalPrices(asset, 200),
-    getTvlForAsset(asset),
+  const [priceResult, histResult, tvlResult, globalResult] = await Promise.allSettled([
+    getCurrentPricesWithProvenance([asset]),
+    getHistoricalPricesWithProvenance(asset, 200),
+    getTvlForAssetWithProvenance(asset),
     getGlobalDerivativeData(),
   ]);
 
-  const currentPrice = prices.status === "fulfilled" ? (prices.value[asset]?.price ?? 0) : 0;
-  const hist: HistoricalPrice[] = historical.status === "fulfilled" ? historical.value : [];
-  const tvlValue = tvl.status === "fulfilled" ? tvl.value : 0;
-  const globalInfo = globalData.status === "fulfilled" ? globalData.value : { totalLiquidationsUsd: 0, totalOpenInterestUsd: 0 };
+  const priceData = priceResult.status === "fulfilled" ? priceResult.value[asset] : null;
+  const histData = histResult.status === "fulfilled" ? histResult.value : null;
+  const tvlData = tvlResult.status === "fulfilled" ? tvlResult.value : null;
+  const globalData = globalResult.status === "fulfilled" ? globalResult.value : null;
+
+  const currentPrice = priceData?.price ?? 0;
+  const hist: HistoricalPrice[] = histData?.prices ?? [];
+  const tvlValue = tvlData?.tvl ?? 0;
+  const globalInfo = globalData ?? { totalLiquidationsUsd: 0, totalOpenInterestUsd: 0, missing: true, provenance: makeProvenance("FALLBACK_ZERO", new Date(), null, PRICE_STALE_THRESHOLD_MS, true) };
 
   const priceSeries = hist.map((p) => p.price);
   const now = new Date().toISOString();
 
+  // ── Data quality flags ──────────────────────────────────────────────────────
+  const qualityFlags: QualityFlag[] = [];
+
+  if (!priceData || priceData.missing || currentPrice <= 0) {
+    qualityFlags.push("MISSING_PRICE");
+    qualityFlags.push("DATA_UNAVAILABLE");
+  } else if (priceData.provenance.isFallback) {
+    qualityFlags.push("FALLBACK_PRICE_USED");
+  } else if (priceData.provenance.isStale) {
+    qualityFlags.push("STALE_PRICE");
+  }
+
+  if (!histData || histData.missing) {
+    qualityFlags.push("MISSING_HISTORY");
+    qualityFlags.push("INSUFFICIENT_HISTORY");
+  } else if (histData.insufficient) {
+    qualityFlags.push("INSUFFICIENT_HISTORY");
+  } else if (histData.provenance.isStale) {
+    qualityFlags.push("STALE_HISTORY");
+  }
+
+  if (!tvlData || tvlData.missing) {
+    qualityFlags.push("TVL_MISSING");
+  }
+
+  qualityFlags.push("SYNTHETIC_OI");
+  qualityFlags.push("SYNTHETIC_FUNDING");
+  qualityFlags.push("VOLUME_MISSING");
+
+  // ── Price change calculation ────────────────────────────────────────────────
   const prev24Price = priceSeries.length > 6 ? priceSeries[priceSeries.length - 7] : currentPrice;
   const priceChange24h = currentPrice - prev24Price;
   const priceChangePct24h = prev24Price > 0 ? (priceChange24h / prev24Price) * 100 : 0;
@@ -432,6 +493,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     updatedAt: now,
   };
 
+  // ── Indicators ──────────────────────────────────────────────────────────────
   const ema9Val = lastEma(priceSeries, 9);
   const ema21Val = lastEma(priceSeries, 21);
   const ema50Val = lastEma(priceSeries, 50);
@@ -453,10 +515,10 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     trendStrength,
   };
 
+  // ── OI context (synthetic — flagged) ───────────────────────────────────────
   const oiBase = globalInfo.totalOpenInterestUsd;
   const oiShare: Record<string, number> = { ETH: 0.35, BTC: 0.45, SOL: 0.20 };
   const estimatedOI = oiBase * (oiShare[asset] ?? 0.2);
-
   const fundingMultiplier = regime === "BULL" ? 1 : regime === "BEAR" ? -1 : 0;
   const fundingRate = 0.0001 * fundingMultiplier + (Math.random() - 0.5) * 0.00005;
   const oiChangePct24h = priceChangePct24h * 0.5;
@@ -473,6 +535,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     dominantSide,
   };
 
+  // ── Direction + reason codes ────────────────────────────────────────────────
   let direction: Direction;
   const reasonCodes: string[] = [];
   const rejectionCodes: RejectionCode[] = [];
@@ -495,6 +558,22 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   if (rsiVal < 30) reasonCodes.push("RSI_OVERSOLD");
   if (Math.abs(fundingRate) > 0.0005) reasonCodes.push("FUNDING_EXTREME");
 
+  // ── Data-quality guards — push to WAIT before any other rule ───────────────
+  if (qualityFlags.includes("MISSING_PRICE") || qualityFlags.includes("DATA_UNAVAILABLE")) {
+    direction = "WAIT";
+    if (!rejectionCodes.includes("DATA_UNAVAILABLE")) rejectionCodes.push("DATA_UNAVAILABLE");
+  }
+  if (qualityFlags.includes("FALLBACK_PRICE_USED")) {
+    if (!rejectionCodes.includes("FALLBACK_PRICE_USED")) rejectionCodes.push("FALLBACK_PRICE_USED");
+  }
+  if (qualityFlags.includes("STALE_PRICE")) {
+    if (!rejectionCodes.includes("STALE_PRICE")) rejectionCodes.push("STALE_PRICE");
+  }
+  if (qualityFlags.includes("INSUFFICIENT_HISTORY")) {
+    if (!rejectionCodes.includes("INSUFFICIENT_HISTORY")) rejectionCodes.push("INSUFFICIENT_HISTORY");
+  }
+
+  // ── Price levels ────────────────────────────────────────────────────────────
   const atrFactor = atrVal > 0 ? atrVal : currentPrice * 0.005;
   const entryZoneLow = direction === "LONG" ? currentPrice - atrFactor * 0.3 : currentPrice;
   const entryZoneHigh = direction === "LONG" ? currentPrice + atrFactor * 0.1 : currentPrice + atrFactor * 0.3;
@@ -516,7 +595,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   const narrativeRisk = assessNarrativeRisk(regime, reasonCodes, oiContext, direction);
   const rrRatio = computeRR(entryZoneHigh, entryZoneLow, targetZone, invalidationPrice, direction);
 
-  // Hard Execution Rules
+  // ── Hard execution rules ────────────────────────────────────────────────────
   if (regime === "UNDEFINED") {
     direction = "WAIT";
     rejectionCodes.push("UNDEFINED_REGIME");
@@ -529,7 +608,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     direction = "WAIT";
     rejectionCodes.push("RR_BELOW_THRESHOLD");
   }
-  
+
   let pVerdict: ProcessVerdict = "APPROVED";
   if (entryQuality === "LATE") {
     rejectionCodes.push("ENTRY_TOO_LATE");
@@ -552,22 +631,77 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   }
 
   let finalProcessVerdict = computeProcessVerdict(rejectionCodes, entryQuality, "ADMISSIBLE", narrativeRisk, rrRatio);
-  
   let whyTrade = generateWhyTrade(direction, finalProcessVerdict, rejectionCodes, setupFamily, rrRatio, entryQuality);
 
-  if (constraints.pythConfidenceFilter) {
+  // ── Pyth secondary verifier (scaffolded) ───────────────────────────────────
+  let pythVerifier: PythVerifierResult;
+
+  if (!constraints.pythConfidenceFilter) {
+    pythVerifier = makePythVerifierSkipped();
+  } else {
     const pythData = await fetchPythPrice(asset).catch(() => null);
-    if (pythData && pythData.confidenceRatio > (1 - constraints.pythConfidenceThreshold)) {
-      if (!rejectionCodes.includes("CONFIDENCE_STRUCTURE_MISMATCH")) {
-        rejectionCodes.push("CONFIDENCE_STRUCTURE_MISMATCH");
+    if (!pythData) {
+      pythVerifier = makePythVerifierUnavailable();
+      qualityFlags.push("PYTH_UNAVAILABLE");
+    } else {
+      const divergencePct = currentPrice > 0
+        ? Math.abs(pythData.price - currentPrice) / currentPrice * 100
+        : null;
+      const hasDivergence = divergencePct != null && divergencePct > 0.5;
+      const isStale = !pythData.fresh;
+
+      if (hasDivergence) qualityFlags.push("CONFLICTING_PRICES");
+
+      let pythVerdict: PythVerifierResult["verdict"] = "CONFIRMS";
+      let verdictDetail = `Pyth price $${pythData.price.toFixed(2)} vs DefiLlama $${currentPrice.toFixed(2)}.`;
+
+      if (isStale) {
+        pythVerdict = "UNAVAILABLE";
+        verdictDetail += " Pyth data is stale (>30s old).";
+        qualityFlags.push("PYTH_UNAVAILABLE");
+      } else if (hasDivergence) {
+        pythVerdict = "DIVERGES";
+        verdictDetail += ` Divergence ${divergencePct!.toFixed(2)}% exceeds 0.5% threshold.`;
+      } else {
+        verdictDetail += ` Divergence ${divergencePct != null ? divergencePct.toFixed(3) : "n/a"}% within threshold.`;
       }
-      if (finalProcessVerdict === "APPROVED") {
-        finalProcessVerdict = "DEGRADED";
+
+      pythVerifier = {
+        scaffolded: true,
+        checked: true,
+        pythPrice: pythData.price,
+        defillamaPrice: currentPrice,
+        priceDivergencePct: divergencePct,
+        confidenceRatio: pythData.confidenceRatio,
+        confidenceStatus: pythData.confidenceStatus,
+        fresh: pythData.fresh,
+        verdict: pythVerdict,
+        verdictDetail,
+        influencesProcessVerdict: constraints.pythConfidenceFilter,
+        provenance: makeProvenance(
+          "PYTH_HERMES",
+          new Date(),
+          new Date(pythData.publishTime).getTime(),
+          30000,
+          false,
+        ),
+      };
+
+      // Confidence filter (existing logic)
+      if (pythData.confidenceRatio > (1 - constraints.pythConfidenceThreshold)) {
+        if (!rejectionCodes.includes("CONFIDENCE_STRUCTURE_MISMATCH")) {
+          rejectionCodes.push("CONFIDENCE_STRUCTURE_MISMATCH");
+        }
+        if (finalProcessVerdict === "APPROVED") {
+          finalProcessVerdict = "DEGRADED";
+        }
+        qualityFlags.push("LOW_CONFIDENCE");
+        whyTrade += ` Pyth confidence LOW (ratio: ${pythData.confidenceRatio.toFixed(4)}).`;
       }
-      whyTrade += ` Pyth confidence LOW (ratio: ${pythData.confidenceRatio.toFixed(4)}).`;
     }
   }
 
+  // ── DJZS audit ──────────────────────────────────────────────────────────────
   const checks = buildAuditChecks(trendRegime, oiContext, direction, priceSeries);
   const { verdict: auditVerdict, summary: auditSummary } = computeVerdict(checks);
   const logicAdmissibility = computeLogicAdmissibility(finalProcessVerdict, auditVerdict, rejectionCodes);
@@ -581,11 +715,16 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   confidence -= rejectionCodes.length * 10;
   if (narrativeRisk === "HIGH") confidence -= 5;
   if (entryQuality === "LATE") confidence -= 10;
+  // Reduce confidence when data quality is degraded
+  if (qualityFlags.includes("STALE_PRICE")) confidence -= 10;
+  if (qualityFlags.includes("INSUFFICIENT_HISTORY")) confidence -= 15;
+  if (qualityFlags.includes("FALLBACK_PRICE_USED")) confidence -= 20;
   confidence = clamp(confidence, 5, 95);
 
   const rejectIf = buildRejectConditions(asset, regime, ema50Val, atrVal, invalidationPrice);
   const thesis = generateThesis(asset, direction, regime, setupFamily, ema9Val, ema21Val, ema50Val, rsiVal, macdResult.histogram);
   const preTradChecklist = buildPreTradeChecklist(thesis, regime, entryZoneLow, entryZoneHigh, invalidationPrice, targetZone, reasonCodes, rejectIf, rrRatio);
+  whyTrade = generateWhyTrade(direction, finalProcessVerdict, rejectionCodes, setupFamily, rrRatio, entryQuality);
 
   const outcomeTracking: OutcomeTracking = {
     scaffolded: true,
@@ -604,8 +743,34 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     generatedAt: now,
   };
 
+  // ── Build DataQualityReport ─────────────────────────────────────────────────
+  const dedupedFlags: QualityFlag[] = [...new Set(qualityFlags)];
+  const grade = computeDataQualityGrade(dedupedFlags);
+  const isCritical = grade === "CRITICAL";
+  const forcedWaitReason = isCritical
+    ? `Data quality is CRITICAL: ${dedupedFlags.filter(f => ["MISSING_PRICE", "DATA_UNAVAILABLE"].includes(f)).join(", ")}.`
+    : qualityFlags.includes("INSUFFICIENT_HISTORY")
+    ? `Only ${hist.length} bars available — minimum is ${MIN_HISTORY_BARS}.`
+    : null;
+
+  const dataQuality: DataQualityReport = {
+    grade,
+    flags: dedupedFlags,
+    priceProvenance: priceData?.provenance ?? makeProvenance("FALLBACK_ZERO", new Date(), null, PRICE_STALE_THRESHOLD_MS, true),
+    historyProvenance: histData?.provenance ?? makeProvenance("FALLBACK_ZERO", new Date(), null, 3600000, true),
+    oiProvenance: makeProvenance("SYNTHETIC", new Date(), null, PRICE_STALE_THRESHOLD_MS, false),
+    tvlProvenance: tvlData?.provenance ?? null,
+    pythVerifier,
+    historicalBarCount: hist.length,
+    minHistoricalBarsRequired: MIN_HISTORY_BARS,
+    dataReadyForSignal: !isCritical && !qualityFlags.includes("INSUFFICIENT_HISTORY"),
+    degradedConfidence: grade === "DEGRADED" || grade === "POOR",
+    forcedWaitReason,
+    computedAt: now,
+  };
+
   const elapsed = Date.now() - startMs;
-  logger.info({ asset, direction, verdict: auditVerdict, confidence, elapsed }, "Signal computed");
+  logger.info({ asset, direction, verdict: auditVerdict, confidence, dataGrade: grade, elapsed }, "Signal computed");
 
   return {
     asset,
@@ -636,6 +801,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     processQualityGrade,
     preTradChecklist,
     outcomeTracking,
+    dataQuality,
   };
 }
 

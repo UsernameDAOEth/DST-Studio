@@ -51,7 +51,7 @@ export interface Signal {
   /** Explicit conditions that would invalidate this signal if triggered. e.g. "Price closes below EMA50", "OI drops > 15% in 4H".
    */
   rejectIf: string[];
-  /** Machine-readable codes for why the setup was rejected or degraded. Possible values: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY.
+  /** Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY. Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT).
    */
   rejectionCodes: string[];
   /** Overall process quality grade. Reflects discipline of the setup independent of market outcome.

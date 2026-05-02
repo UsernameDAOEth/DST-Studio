@@ -58,7 +58,7 @@ export default function Integrations() {
                       <td className="px-6 py-3 font-bold text-foreground">{price.asset}</td>
                       <td className="px-6 py-3">{formatCurrency(price.price)}</td>
                       <td className="px-6 py-3 text-muted-foreground">
-                        ±{formatCurrency(price.confidenceInterval)} ({(price.confidenceRatio * 100).toFixed(2)}%)
+                        ±{formatCurrency(price.confidence)} ({(price.confidenceRatio * 100).toFixed(2)}%)
                       </td>
                       <td className="px-6 py-3">
                         <span className={cn(
@@ -68,7 +68,7 @@ export default function Integrations() {
                         )}>{price.confidenceStatus}</span>
                       </td>
                       <td className="px-6 py-3 text-xs text-muted-foreground">
-                        {price.isStale ? "STALE" : "FRESH"} • {new Date(price.publishTime).toLocaleTimeString()}
+                        {price.fresh ? "FRESH" : "STALE"} • {new Date(price.publishTime).toLocaleTimeString()}
                       </td>
                     </tr>
                   ))}
