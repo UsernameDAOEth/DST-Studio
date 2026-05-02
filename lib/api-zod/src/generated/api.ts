@@ -589,3 +589,507 @@ export const GetIntegrationByNameResponse = zod
   .describe(
     "Scaffold entry for a planned system integration. All integrations are off by default until configured and enabled.\n",
   );
+
+/**
+ * @summary Get current Hermes scan loop status and job queue
+ */
+export const GetHermesStatusResponse = zod
+  .object({
+    running: zod.boolean(),
+    schedulerActive: zod
+      .boolean()
+      .describe("Whether the Hermes 15-minute interval scheduler is active"),
+    lastRunAt: zod.coerce.date().nullish(),
+    nextRunAt: zod.coerce.date().nullish(),
+    scanIntervalMinutes: zod.number(),
+    totalScansToday: zod.number(),
+    totalApprovedToday: zod.number(),
+    totalWaitToday: zod.number(),
+    activeJobs: zod.array(
+      zod
+        .object({
+          id: zod.string(),
+          asset: zod.string(),
+          scanStartedAt: zod.coerce.date(),
+          scanCompletedAt: zod.coerce.date().nullish(),
+          phases: zod.array(
+            zod
+              .object({
+                stage: zod.enum([
+                  "DEFILAMMA",
+                  "PYTH",
+                  "BROWSERBASE",
+                  "DJZS_AUDIT",
+                  "ROUTING",
+                ]),
+                status: zod.enum([
+                  "PENDING",
+                  "RUNNING",
+                  "COMPLETE",
+                  "SKIPPED",
+                  "FAILED",
+                ]),
+                skippedReason: zod.string().nullish(),
+                durationMs: zod.number().nullish(),
+                result: zod.string().nullish(),
+              })
+              .describe("One stage in a Hermes scan pipeline job"),
+          ),
+          finalDirection: zod.enum(["LONG", "SHORT", "WAIT"]).nullish(),
+          finalProcessVerdict: zod
+            .enum(["APPROVED", "REJECTED", "DEGRADED"])
+            .nullish(),
+          setupFamily: zod.string().nullish(),
+          rejectionCodes: zod.array(zod.string()),
+          triggered: zod
+            .boolean()
+            .describe(
+              "Whether this job was triggered manually or by the scheduler",
+            ),
+        })
+        .describe(
+          "A single Hermes scan job for one asset through the full pipeline",
+        ),
+    ),
+    recentJobs: zod.array(
+      zod
+        .object({
+          id: zod.string(),
+          asset: zod.string(),
+          scanStartedAt: zod.coerce.date(),
+          scanCompletedAt: zod.coerce.date().nullish(),
+          phases: zod.array(
+            zod
+              .object({
+                stage: zod.enum([
+                  "DEFILAMMA",
+                  "PYTH",
+                  "BROWSERBASE",
+                  "DJZS_AUDIT",
+                  "ROUTING",
+                ]),
+                status: zod.enum([
+                  "PENDING",
+                  "RUNNING",
+                  "COMPLETE",
+                  "SKIPPED",
+                  "FAILED",
+                ]),
+                skippedReason: zod.string().nullish(),
+                durationMs: zod.number().nullish(),
+                result: zod.string().nullish(),
+              })
+              .describe("One stage in a Hermes scan pipeline job"),
+          ),
+          finalDirection: zod.enum(["LONG", "SHORT", "WAIT"]).nullish(),
+          finalProcessVerdict: zod
+            .enum(["APPROVED", "REJECTED", "DEGRADED"])
+            .nullish(),
+          setupFamily: zod.string().nullish(),
+          rejectionCodes: zod.array(zod.string()),
+          triggered: zod
+            .boolean()
+            .describe(
+              "Whether this job was triggered manually or by the scheduler",
+            ),
+        })
+        .describe(
+          "A single Hermes scan job for one asset through the full pipeline",
+        ),
+    ),
+    phase: zod
+      .string()
+      .optional()
+      .describe("Current phase label shown in the control center"),
+  })
+  .describe(
+    "Current state of the Hermes scan loop. The 15-minute scan loop is scaffolded and will be activated when the Hermes Scheduler integration is enabled.\n",
+  );
+
+/**
+ * @summary Get current Hermes system constraints
+ */
+export const GetHermesConstraintsResponse = zod
+  .object({
+    preferredAssets: zod
+      .array(zod.string())
+      .describe(
+        'Assets to scan in order of priority (e.g. [\"BTC\", \"ETH\", \"SOL\"])',
+      ),
+    activeTimeframe: zod
+      .enum(["1H", "4H", "1D"])
+      .describe("Active timeframe for all scans"),
+    minRRThreshold: zod
+      .number()
+      .describe(
+        "Minimum reward\/risk ratio required for APPROVED. Default 1.5.",
+      ),
+    lateEntryAtrMultiplier: zod
+      .number()
+      .describe("ATR multiplier for late-entry detection. Default 1.5."),
+    oneSignalPerAsset: zod
+      .boolean()
+      .describe("Enforce only one active APPROVED signal per asset\/timeframe"),
+    browserbaseTriggerPolicy: zod
+      .enum(["DISABLED", "HIGH_CONFIDENCE", "APPROVED_ONLY"])
+      .describe("When to trigger Browserbase web research"),
+    pythConfidenceFilter: zod
+      .boolean()
+      .describe(
+        "Whether to use Pyth confidence score in processVerdict calculation",
+      ),
+    pythConfidenceThreshold: zod
+      .number()
+      .describe(
+        "Minimum Pyth confidence ratio (0-1) to allow APPROVED. Default 0.95.",
+      ),
+    alertRouting: zod.object({
+      telegram: zod.boolean(),
+      xmtp: zod.boolean(),
+      discord: zod.boolean(),
+    }),
+    waitBiasPolicy: zod
+      .enum(["STRICT", "STANDARD", "RELAXED"])
+      .describe(
+        "Overall WAIT bias. STRICT = most scans end in WAIT (default). STANDARD = moderate filter. RELAXED = fewer filters.\n",
+      ),
+    updatedAt: zod.coerce.date(),
+  })
+  .describe(
+    "Durable system constraints managed by Hermes. These are enforced on every scan and are the authoritative source of signal policy. Not opinions — constraints.\n",
+  );
+
+/**
+ * @summary Update Hermes system constraints
+ */
+export const UpdateHermesConstraintsBody = zod
+  .object({
+    preferredAssets: zod.array(zod.string()).optional(),
+    activeTimeframe: zod.enum(["1H", "4H", "1D"]).optional(),
+    minRRThreshold: zod.number().optional(),
+    lateEntryAtrMultiplier: zod.number().optional(),
+    oneSignalPerAsset: zod.boolean().optional(),
+    browserbaseTriggerPolicy: zod
+      .enum(["DISABLED", "HIGH_CONFIDENCE", "APPROVED_ONLY"])
+      .optional(),
+    pythConfidenceFilter: zod.boolean().optional(),
+    pythConfidenceThreshold: zod.number().optional(),
+    alertRouting: zod
+      .object({
+        telegram: zod.boolean().optional(),
+        xmtp: zod.boolean().optional(),
+        discord: zod.boolean().optional(),
+      })
+      .optional(),
+    waitBiasPolicy: zod.enum(["STRICT", "STANDARD", "RELAXED"]).optional(),
+  })
+  .describe(
+    "Partial update to Hermes constraints. Only provided fields are updated.",
+  );
+
+export const UpdateHermesConstraintsResponse = zod
+  .object({
+    preferredAssets: zod
+      .array(zod.string())
+      .describe(
+        'Assets to scan in order of priority (e.g. [\"BTC\", \"ETH\", \"SOL\"])',
+      ),
+    activeTimeframe: zod
+      .enum(["1H", "4H", "1D"])
+      .describe("Active timeframe for all scans"),
+    minRRThreshold: zod
+      .number()
+      .describe(
+        "Minimum reward\/risk ratio required for APPROVED. Default 1.5.",
+      ),
+    lateEntryAtrMultiplier: zod
+      .number()
+      .describe("ATR multiplier for late-entry detection. Default 1.5."),
+    oneSignalPerAsset: zod
+      .boolean()
+      .describe("Enforce only one active APPROVED signal per asset\/timeframe"),
+    browserbaseTriggerPolicy: zod
+      .enum(["DISABLED", "HIGH_CONFIDENCE", "APPROVED_ONLY"])
+      .describe("When to trigger Browserbase web research"),
+    pythConfidenceFilter: zod
+      .boolean()
+      .describe(
+        "Whether to use Pyth confidence score in processVerdict calculation",
+      ),
+    pythConfidenceThreshold: zod
+      .number()
+      .describe(
+        "Minimum Pyth confidence ratio (0-1) to allow APPROVED. Default 0.95.",
+      ),
+    alertRouting: zod.object({
+      telegram: zod.boolean(),
+      xmtp: zod.boolean(),
+      discord: zod.boolean(),
+    }),
+    waitBiasPolicy: zod
+      .enum(["STRICT", "STANDARD", "RELAXED"])
+      .describe(
+        "Overall WAIT bias. STRICT = most scans end in WAIT (default). STANDARD = moderate filter. RELAXED = fewer filters.\n",
+      ),
+    updatedAt: zod.coerce.date(),
+  })
+  .describe(
+    "Durable system constraints managed by Hermes. These are enforced on every scan and are the authoritative source of signal policy. Not opinions — constraints.\n",
+  );
+
+/**
+ * @summary Get stage accuracy and evaluation metrics
+ */
+export const getHermesMetricsQueryPeriodDefault = `7D`;
+
+export const GetHermesMetricsQueryParams = zod.object({
+  period: zod
+    .enum(["24H", "7D", "30D"])
+    .default(getHermesMetricsQueryPeriodDefault),
+});
+
+export const GetHermesMetricsResponse = zod
+  .object({
+    period: zod.enum(["24H", "7D", "30D"]),
+    totalScans: zod.number(),
+    totalCandidates: zod
+      .number()
+      .describe("Scans that produced a non-WAIT direction before DJZS audit"),
+    totalApproved: zod.number(),
+    totalDegraded: zod.number(),
+    totalRejected: zod.number(),
+    totalWait: zod.number(),
+    waitRate: zod
+      .number()
+      .describe("Fraction of scans ending WAIT. Target > 0.70 in STRICT mode."),
+    approvalRate: zod.number(),
+    avgRROnApproved: zod.number().nullish(),
+    avgConfidenceOnApproved: zod.number().nullish(),
+    candidateAccuracy: zod
+      .number()
+      .nullish()
+      .describe("Scaffolded — requires Phase 3 outcome tracking"),
+    filterAccuracy: zod
+      .number()
+      .nullish()
+      .describe(
+        "Scaffolded — fraction of REJECTED that would have lost if taken",
+      ),
+    timingAccuracy: zod
+      .number()
+      .nullish()
+      .describe(
+        "Fraction of APPROVED with OPTIMAL or ACCEPTABLE entry quality",
+      ),
+    noTradeQuality: zod
+      .number()
+      .nullish()
+      .describe("Scaffolded — fraction of WAITs that would have lost if taken"),
+    researchLift: zod
+      .number()
+      .nullish()
+      .describe(
+        "Scaffolded — improvement in accuracy when Browserbase was triggered",
+      ),
+    alertUsefulness: zod
+      .number()
+      .nullish()
+      .describe("Scaffolded — requires delivery + outcome data"),
+    rejectionCodeBreakdown: zod.record(zod.string(), zod.number()),
+    setupFamilyBreakdown: zod.record(zod.string(), zod.number()),
+    pythInfluenceCount: zod
+      .number()
+      .describe(
+        "Number of signals where Pyth confidence affected processVerdict",
+      ),
+    computedAt: zod.coerce.date(),
+  })
+  .describe(
+    "Stage accuracy and evaluation metrics. Most rates are derived from the signals table. Outcome-dependent rates (candidateAccuracy, filterAccuracy, noTradeQuality) are null until outcome tracking is live in Phase 3.\n",
+  );
+
+/**
+ * @summary Trigger a manual Hermes scan for all tracked assets
+ */
+export const TriggerHermesScanResponse = zod
+  .object({
+    triggeredAt: zod.coerce.date(),
+    assets: zod.array(zod.string()),
+    jobIds: zod.array(zod.string()),
+    message: zod.string(),
+  })
+  .describe("Result of a triggered Hermes scan");
+
+/**
+ * @summary Get weekly evaluation report for threshold and rule review
+ */
+export const GetHermesEvaluationResponse = zod
+  .object({
+    generatedAt: zod.coerce.date(),
+    periodLabel: zod.string(),
+    thresholdReview: zod.array(
+      zod.object({
+        parameter: zod.string(),
+        currentValue: zod.string(),
+        observation: zod.string(),
+        recommendation: zod.enum(["KEEP", "TIGHTEN", "LOOSEN", "REVIEW"]),
+        rationale: zod.string(),
+      }),
+    ),
+    rejectConditionReview: zod.array(
+      zod.object({
+        parameter: zod.string(),
+        currentValue: zod.string(),
+        observation: zod.string(),
+        recommendation: zod.enum(["KEEP", "TIGHTEN", "LOOSEN", "REVIEW"]),
+        rationale: zod.string(),
+      }),
+    ),
+    triggerRuleReview: zod.array(
+      zod.object({
+        parameter: zod.string(),
+        currentValue: zod.string(),
+        observation: zod.string(),
+        recommendation: zod.enum(["KEEP", "TIGHTEN", "LOOSEN", "REVIEW"]),
+        rationale: zod.string(),
+      }),
+    ),
+    routingRuleReview: zod.array(
+      zod.object({
+        parameter: zod.string(),
+        currentValue: zod.string(),
+        observation: zod.string(),
+        recommendation: zod.enum(["KEEP", "TIGHTEN", "LOOSEN", "REVIEW"]),
+        rationale: zod.string(),
+      }),
+    ),
+    overallAssessment: zod.string(),
+    doctrineStatus: zod
+      .string()
+      .describe(
+        'Always \"INTACT\" — DJZS doctrine is never modified by evaluation',
+      ),
+  })
+  .describe(
+    "Weekly evaluation report reviewing thresholds, reject conditions, trigger rules, and routing rules. Does not change core doctrine — only surfaces what to review.\n",
+  );
+
+/**
+ * @summary Get recent Hermes job runs
+ */
+export const getHermesJobsQueryLimitDefault = 20;
+
+export const GetHermesJobsQueryParams = zod.object({
+  limit: zod.coerce.number().default(getHermesJobsQueryLimitDefault),
+});
+
+export const GetHermesJobsResponseItem = zod
+  .object({
+    id: zod.string(),
+    asset: zod.string(),
+    scanStartedAt: zod.coerce.date(),
+    scanCompletedAt: zod.coerce.date().nullish(),
+    phases: zod.array(
+      zod
+        .object({
+          stage: zod.enum([
+            "DEFILAMMA",
+            "PYTH",
+            "BROWSERBASE",
+            "DJZS_AUDIT",
+            "ROUTING",
+          ]),
+          status: zod.enum([
+            "PENDING",
+            "RUNNING",
+            "COMPLETE",
+            "SKIPPED",
+            "FAILED",
+          ]),
+          skippedReason: zod.string().nullish(),
+          durationMs: zod.number().nullish(),
+          result: zod.string().nullish(),
+        })
+        .describe("One stage in a Hermes scan pipeline job"),
+    ),
+    finalDirection: zod.enum(["LONG", "SHORT", "WAIT"]).nullish(),
+    finalProcessVerdict: zod
+      .enum(["APPROVED", "REJECTED", "DEGRADED"])
+      .nullish(),
+    setupFamily: zod.string().nullish(),
+    rejectionCodes: zod.array(zod.string()),
+    triggered: zod
+      .boolean()
+      .describe("Whether this job was triggered manually or by the scheduler"),
+  })
+  .describe("A single Hermes scan job for one asset through the full pipeline");
+export const GetHermesJobsResponse = zod.array(GetHermesJobsResponseItem);
+
+/**
+ * @summary Get Pyth Network live price and confidence for all tracked assets
+ */
+export const GetPythPricesResponseItem = zod
+  .object({
+    asset: zod.string(),
+    pythId: zod.string().describe("Pyth price feed ID (hex)"),
+    price: zod.number(),
+    confidence: zod.number().describe("Absolute confidence interval (±USD)"),
+    confidenceRatio: zod
+      .number()
+      .describe("confidence \/ price — lower is better"),
+    confidenceStatus: zod
+      .enum(["HIGH", "MEDIUM", "LOW"])
+      .describe("HIGH = ratio < 0.001, MEDIUM = < 0.01, LOW = >= 0.01"),
+    emaPrice: zod
+      .number()
+      .describe("Exponential moving average price from Pyth"),
+    emaConfidence: zod.number(),
+    publishTime: zod.coerce.date(),
+    slotAge: zod
+      .number()
+      .describe("Slots since last update (freshness indicator)"),
+    fresh: zod.boolean().describe("Whether the price is fresh (slotAge < 10)"),
+    influencesProcessVerdict: zod
+      .boolean()
+      .describe("Whether this data is currently affecting processVerdict"),
+  })
+  .describe(
+    "Live price and confidence data from the Pyth Network Hermes REST API. Confidence reflects the price band around the reported price. A confidence ratio (confidence\/price) below the threshold in HermesConstraints degrades or blocks APPROVED verdicts when pythConfidenceFilter is enabled.\n",
+  );
+export const GetPythPricesResponse = zod.array(GetPythPricesResponseItem);
+
+/**
+ * @summary Get Pyth price and confidence for a specific asset
+ */
+export const GetPythPriceByAssetParams = zod.object({
+  asset: zod.coerce.string(),
+});
+
+export const GetPythPriceByAssetResponse = zod
+  .object({
+    asset: zod.string(),
+    pythId: zod.string().describe("Pyth price feed ID (hex)"),
+    price: zod.number(),
+    confidence: zod.number().describe("Absolute confidence interval (±USD)"),
+    confidenceRatio: zod
+      .number()
+      .describe("confidence \/ price — lower is better"),
+    confidenceStatus: zod
+      .enum(["HIGH", "MEDIUM", "LOW"])
+      .describe("HIGH = ratio < 0.001, MEDIUM = < 0.01, LOW = >= 0.01"),
+    emaPrice: zod
+      .number()
+      .describe("Exponential moving average price from Pyth"),
+    emaConfidence: zod.number(),
+    publishTime: zod.coerce.date(),
+    slotAge: zod
+      .number()
+      .describe("Slots since last update (freshness indicator)"),
+    fresh: zod.boolean().describe("Whether the price is fresh (slotAge < 10)"),
+    influencesProcessVerdict: zod
+      .boolean()
+      .describe("Whether this data is currently affecting processVerdict"),
+  })
+  .describe(
+    "Live price and confidence data from the Pyth Network Hermes REST API. Confidence reflects the price band around the reported price. A confidence ratio (confidence\/price) below the threshold in HermesConstraints degrades or blocks APPROVED verdicts when pythConfidenceFilter is enabled.\n",
+  );

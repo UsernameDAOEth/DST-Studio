@@ -26,7 +26,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
 
-## DST — Deterministic Signal Trader (Phase 2)
+## DST — Deterministic Signal Trader (Phase 3)
 
 ### Purpose
 DST is the **predictive layer** — a disciplined pre-trade process system for perp traders monitoring ETH, BTC, SOL on the 4H timeframe. DJZS is the **admissibility and audit layer**. Every signal is a complete process report with full pre-trade checklist, logic admissibility gate, process verdict, and explicit rejection reasons. WAIT is the default when any required field is missing or any hard rule is violated.
@@ -34,11 +34,20 @@ DST is the **predictive layer** — a disciplined pre-trade process system for p
 ### Architecture
 - **Frontend** (`artifacts/dst`): React + Vite DJZS dark terminal UI (near-black #080B0F, acid lime #A3E635)
 - **Backend** (`artifacts/api-server`): Express API at `/api`
-- **Signal Engine** (`artifacts/api-server/src/lib/dst/signalEngine.ts`): Full pre-trade process enforcement
+- **Signal Engine** (`artifacts/api-server/src/lib/dst/signalEngine.ts`): Full pre-trade process enforcement, reads HermesConstraints
+- **Hermes Module** (`artifacts/api-server/src/lib/hermes/`): Orchestration runtime — constraints, scan loop, metrics, evaluation
+- **Pyth Client** (`artifacts/api-server/src/lib/pyth/pythClient.ts`): Live price + confidence via Hermes REST API (free, no key)
 - **Integration Registry** (`artifacts/api-server/src/lib/integrations/registry.ts`): 7 scaffolded integration stubs
 - **DefiLlama Client** (`artifacts/api-server/src/lib/dst/defillamaClient.ts`): Market data fetching
 - **Agent Interpreter** (`artifacts/api-server/src/lib/dst/agentInterpreter.ts`): Chat command processing
 - **Database**: PostgreSQL — signals, watchlist, alerts tables (Phase 2 schema)
+
+### Hermes Module — Phase 3
+- `constraints.ts` — system constraints (timeframe, R/R threshold, Pyth filter, alert routing, wait bias policy). Persisted to `/tmp/hermes-constraints.json`
+- `scan.ts` — scan trigger, job tracking, in-memory stats (totalScansToday, totalApprovedToday, totalWaitToday)
+- `metrics.ts` — DB-backed metrics computation (24H/7D/30D): wait rate, approval rate, rejection code breakdown, setup family breakdown
+- `evaluation.ts` — weekly policy evaluation report with per-parameter recommendations (KEEP/TIGHTEN/LOOSEN/REVIEW)
+- `types.ts` — local type definitions (HermesConstraints, HermesJob, HermesMetrics, HermesEvaluation, PythPriceData, EvalReviewItem)
 
 ### Signal Engine — Phase 2 Logic
 - Fetches real-time prices from DefiLlama Coins API
@@ -71,6 +80,15 @@ DST is the **predictive layer** — a disciplined pre-trade process system for p
 - `GET /api/integrations` — all integration scaffold statuses
 - `GET /api/integrations/:name` — individual integration status
 - `POST /api/integrations/:name/toggle` — enable/disable (in-memory)
+- `GET /api/hermes/status` — scan loop state, recent jobs, daily stats
+- `GET /api/hermes/constraints` — current system constraints
+- `PUT /api/hermes/constraints` — update constraints (persisted to disk)
+- `POST /api/hermes/scan` — manual scan trigger (runs all preferred assets)
+- `GET /api/hermes/jobs` — recent job list with phase-by-phase status
+- `GET /api/hermes/metrics?period=24H|7D|30D` — DB-backed scan metrics
+- `GET /api/hermes/evaluation` — weekly policy evaluation report
+- `GET /api/pyth/prices` — live BTC/ETH/SOL prices from Pyth Hermes REST API
+- `GET /api/pyth/price/:asset` — single asset price
 
 ### DB Schema — Phase 2
 `signals` table includes: direction, confidence, verdictDjzs, processVerdict, logicAdmissibility, setupFamily, entryQuality, narrativeRisk, rrRatio, thesis, whyTrade, rejectIf, rejectionCodes, processQualityGrade, preTradChecklist (jsonb), outcomeTracking (jsonb), marketSnapshot (jsonb), trendRegime (jsonb), openInterestContext (jsonb), auditReport (jsonb)
@@ -91,7 +109,9 @@ DST is the **predictive layer** — a disciplined pre-trade process system for p
 - `/watchlist` — tracked assets
 - `/alerts` — alert configuration
 - `/agent` — chat agent
-- `/integrations` — integration scaffold settings panel
+- `/integrations` — integration scaffold + live Pyth price confidence display
+- `/hermes` — Hermes operations console (pipeline stages, system constraints editor, subagent roles, job log)
+- `/evaluation` — stage metrics (24H/7D/30D) + weekly policy evaluation with per-parameter recommendations
 
 ### Extending
 - Add new assets: update `ASSET_MAP` in `defillamaClient.ts`

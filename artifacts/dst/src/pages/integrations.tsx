@@ -1,12 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useGetIntegrations, getGetIntegrationsQueryKey, useToggleIntegration } from "@workspace/api-client-react";
+import { useGetIntegrations, getGetIntegrationsQueryKey, useToggleIntegration, useGetPythPrices } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/format";
 
 export default function Integrations() {
   const queryClient = useQueryClient();
   const { data: integrations, isLoading } = useGetIntegrations();
+  const { data: pythPrices, isLoading: isLoadingPyth } = useGetPythPrices();
   const toggleMutation = useToggleIntegration();
 
   const handleToggle = (name: string) => {
@@ -22,6 +24,59 @@ export default function Integrations() {
       <div className="pb-4 border-b border-border">
         <h1 className="text-2xl font-display text-foreground mb-1">INTEGRATIONS</h1>
         <p className="text-muted-foreground font-mono text-xs uppercase">SYSTEM EXPANSION SCAFFOLD — PHASE 2 / 3 / 4</p>
+      </div>
+
+      {/* LIVE INTEGRATION DATA */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-mono text-muted-foreground uppercase">LIVE INTEGRATION DATA</h2>
+        
+        <Card className="border-border bg-card">
+          <CardHeader className="px-6 py-4 border-b border-border">
+            <CardTitle className="text-lg font-display text-foreground">PYTH NETWORK — LIVE DATA</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isLoadingPyth ? (
+              <div className="p-6"><Skeleton className="h-20 w-full" /></div>
+            ) : (!pythPrices || pythPrices.length === 0) ? (
+              <div className="p-6 text-muted-foreground font-mono text-sm">
+                <span className="text-[hsl(var(--trade-wait))]">PYTH UNAVAILABLE</span> — using DefiLlama prices
+              </div>
+            ) : (
+              <table className="w-full text-sm font-mono text-left">
+                <thead className="bg-secondary text-muted-foreground border-b border-border">
+                  <tr>
+                    <th className="px-6 py-2 font-medium uppercase text-xs">ASSET</th>
+                    <th className="px-6 py-2 font-medium uppercase text-xs">PRICE</th>
+                    <th className="px-6 py-2 font-medium uppercase text-xs">CONFIDENCE ±</th>
+                    <th className="px-6 py-2 font-medium uppercase text-xs">STATUS</th>
+                    <th className="px-6 py-2 font-medium uppercase text-xs">FRESH</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {pythPrices.map(price => (
+                    <tr key={price.asset} className="hover:bg-muted/50">
+                      <td className="px-6 py-3 font-bold text-foreground">{price.asset}</td>
+                      <td className="px-6 py-3">{formatCurrency(price.price)}</td>
+                      <td className="px-6 py-3 text-muted-foreground">
+                        ±{formatCurrency(price.confidenceInterval)} ({(price.confidenceRatio * 100).toFixed(2)}%)
+                      </td>
+                      <td className="px-6 py-3">
+                        <span className={cn(
+                          "chip",
+                          price.confidenceStatus === "HIGH" ? "chip-pass" :
+                          price.confidenceStatus === "MEDIUM" ? "chip-warn" : "chip-fail"
+                        )}>{price.confidenceStatus}</span>
+                      </td>
+                      <td className="px-6 py-3 text-xs text-muted-foreground">
+                        {price.isStale ? "STALE" : "FRESH"} • {new Date(price.publishTime).toLocaleTimeString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <p className="text-body max-w-3xl leading-relaxed">
@@ -68,6 +123,16 @@ export default function Integrations() {
                 <p className="text-sm text-body leading-relaxed flex-1">
                   {integration.description}
                 </p>
+
+                {integration.name === "pyth" && pythPrices && pythPrices.length > 0 && (
+                  <div className="p-3 bg-secondary/50 border border-border rounded-none space-y-1">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Live API Preview</div>
+                    <div className="flex justify-between items-center text-xs font-mono">
+                      <span className="font-bold">{pythPrices[0].asset}</span>
+                      <span className="text-primary">{formatCurrency(pythPrices[0].price)}</span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2 pt-2">
                   {integration.envKeyRequired && (

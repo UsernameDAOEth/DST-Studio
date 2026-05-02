@@ -7,6 +7,8 @@ import watchlistRouter from "./watchlist";
 import alertsRouter from "./alerts";
 import agentRouter from "./agent";
 import integrationsRouter from "./integrations";
+import hermesRouter from "./hermes";
+import pythRouter from "./pyth";
 
 const router: IRouter = Router();
 
@@ -18,5 +20,7 @@ router.use("/watchlist", watchlistRouter);
 router.use("/alerts", alertsRouter);
 router.use("/agent", agentRouter);
 router.use("/integrations", integrationsRouter);
+router.use("/hermes", hermesRouter);
+router.use("/pyth", pythRouter);
 
 export default router;

@@ -119,6 +119,9 @@ export default function Dashboard() {
       <div className="pb-4 border-b border-border">
         <h1 className="text-2xl font-display text-foreground mb-1">DASHBOARD</h1>
         <p className="text-muted-foreground font-mono text-xs uppercase">4H TIMEFRAME // DETERMINISTIC SIGNALS</p>
+        <div className="mt-2 text-muted-foreground font-mono text-xs border-none">
+          HERMES RUNTIME: STANDBY — MANUAL TRIGGER ONLY  |  POLICY: MOST SCANS END IN WAIT  |  DJZS: FINAL GATE
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

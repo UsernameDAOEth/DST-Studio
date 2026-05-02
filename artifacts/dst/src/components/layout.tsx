@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, Bell, Eye, MessageSquare, Settings } from "lucide-react";
+import { Activity, Bell, Eye, MessageSquare, Settings, Cpu, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -7,10 +7,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/", icon: Activity, label: "DASHBOARD" },
+    { href: "/hermes", icon: Cpu, label: "HERMES" },
     { href: "/watchlist", icon: Eye, label: "WATCHLIST" },
     { href: "/alerts", icon: Bell, label: "ALERTS" },
     { href: "/agent", icon: MessageSquare, label: "AGENT" },
     { href: "/integrations", icon: Settings, label: "INTEGRATIONS" },
+    { href: "/evaluation", icon: BarChart2, label: "EVALUATION" },
   ];
 
   return (

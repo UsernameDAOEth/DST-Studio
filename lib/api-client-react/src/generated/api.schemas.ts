@@ -475,6 +475,349 @@ export interface IntegrationStatus {
   phase: string;
 }
 
+/**
+ * Active timeframe for all scans
+ */
+export type HermesConstraintsActiveTimeframe =
+  (typeof HermesConstraintsActiveTimeframe)[keyof typeof HermesConstraintsActiveTimeframe];
+
+export const HermesConstraintsActiveTimeframe = {
+  "1H": "1H",
+  "4H": "4H",
+  "1D": "1D",
+} as const;
+
+/**
+ * When to trigger Browserbase web research
+ */
+export type HermesConstraintsBrowserbaseTriggerPolicy =
+  (typeof HermesConstraintsBrowserbaseTriggerPolicy)[keyof typeof HermesConstraintsBrowserbaseTriggerPolicy];
+
+export const HermesConstraintsBrowserbaseTriggerPolicy = {
+  DISABLED: "DISABLED",
+  HIGH_CONFIDENCE: "HIGH_CONFIDENCE",
+  APPROVED_ONLY: "APPROVED_ONLY",
+} as const;
+
+export type HermesConstraintsAlertRouting = {
+  telegram: boolean;
+  xmtp: boolean;
+  discord: boolean;
+};
+
+/**
+ * Overall WAIT bias. STRICT = most scans end in WAIT (default). STANDARD = moderate filter. RELAXED = fewer filters.
+
+ */
+export type HermesConstraintsWaitBiasPolicy =
+  (typeof HermesConstraintsWaitBiasPolicy)[keyof typeof HermesConstraintsWaitBiasPolicy];
+
+export const HermesConstraintsWaitBiasPolicy = {
+  STRICT: "STRICT",
+  STANDARD: "STANDARD",
+  RELAXED: "RELAXED",
+} as const;
+
+/**
+ * Durable system constraints managed by Hermes. These are enforced on every scan and are the authoritative source of signal policy. Not opinions — constraints.
+
+ */
+export interface HermesConstraints {
+  /** Assets to scan in order of priority (e.g. ["BTC", "ETH", "SOL"]) */
+  preferredAssets: string[];
+  /** Active timeframe for all scans */
+  activeTimeframe: HermesConstraintsActiveTimeframe;
+  /** Minimum reward/risk ratio required for APPROVED. Default 1.5. */
+  minRRThreshold: number;
+  /** ATR multiplier for late-entry detection. Default 1.5. */
+  lateEntryAtrMultiplier: number;
+  /** Enforce only one active APPROVED signal per asset/timeframe */
+  oneSignalPerAsset: boolean;
+  /** When to trigger Browserbase web research */
+  browserbaseTriggerPolicy: HermesConstraintsBrowserbaseTriggerPolicy;
+  /** Whether to use Pyth confidence score in processVerdict calculation */
+  pythConfidenceFilter: boolean;
+  /** Minimum Pyth confidence ratio (0-1) to allow APPROVED. Default 0.95. */
+  pythConfidenceThreshold: number;
+  alertRouting: HermesConstraintsAlertRouting;
+  /** Overall WAIT bias. STRICT = most scans end in WAIT (default). STANDARD = moderate filter. RELAXED = fewer filters.
+   */
+  waitBiasPolicy: HermesConstraintsWaitBiasPolicy;
+  updatedAt: string;
+}
+
+export type HermesConstraintsUpdateActiveTimeframe =
+  (typeof HermesConstraintsUpdateActiveTimeframe)[keyof typeof HermesConstraintsUpdateActiveTimeframe];
+
+export const HermesConstraintsUpdateActiveTimeframe = {
+  "1H": "1H",
+  "4H": "4H",
+  "1D": "1D",
+} as const;
+
+export type HermesConstraintsUpdateBrowserbaseTriggerPolicy =
+  (typeof HermesConstraintsUpdateBrowserbaseTriggerPolicy)[keyof typeof HermesConstraintsUpdateBrowserbaseTriggerPolicy];
+
+export const HermesConstraintsUpdateBrowserbaseTriggerPolicy = {
+  DISABLED: "DISABLED",
+  HIGH_CONFIDENCE: "HIGH_CONFIDENCE",
+  APPROVED_ONLY: "APPROVED_ONLY",
+} as const;
+
+export type HermesConstraintsUpdateAlertRouting = {
+  telegram?: boolean;
+  xmtp?: boolean;
+  discord?: boolean;
+};
+
+export type HermesConstraintsUpdateWaitBiasPolicy =
+  (typeof HermesConstraintsUpdateWaitBiasPolicy)[keyof typeof HermesConstraintsUpdateWaitBiasPolicy];
+
+export const HermesConstraintsUpdateWaitBiasPolicy = {
+  STRICT: "STRICT",
+  STANDARD: "STANDARD",
+  RELAXED: "RELAXED",
+} as const;
+
+/**
+ * Partial update to Hermes constraints. Only provided fields are updated.
+ */
+export interface HermesConstraintsUpdate {
+  preferredAssets?: string[];
+  activeTimeframe?: HermesConstraintsUpdateActiveTimeframe;
+  minRRThreshold?: number;
+  lateEntryAtrMultiplier?: number;
+  oneSignalPerAsset?: boolean;
+  browserbaseTriggerPolicy?: HermesConstraintsUpdateBrowserbaseTriggerPolicy;
+  pythConfidenceFilter?: boolean;
+  pythConfidenceThreshold?: number;
+  alertRouting?: HermesConstraintsUpdateAlertRouting;
+  waitBiasPolicy?: HermesConstraintsUpdateWaitBiasPolicy;
+}
+
+export type HermesJobPhaseStage =
+  (typeof HermesJobPhaseStage)[keyof typeof HermesJobPhaseStage];
+
+export const HermesJobPhaseStage = {
+  DEFILAMMA: "DEFILAMMA",
+  PYTH: "PYTH",
+  BROWSERBASE: "BROWSERBASE",
+  DJZS_AUDIT: "DJZS_AUDIT",
+  ROUTING: "ROUTING",
+} as const;
+
+export type HermesJobPhaseStatus =
+  (typeof HermesJobPhaseStatus)[keyof typeof HermesJobPhaseStatus];
+
+export const HermesJobPhaseStatus = {
+  PENDING: "PENDING",
+  RUNNING: "RUNNING",
+  COMPLETE: "COMPLETE",
+  SKIPPED: "SKIPPED",
+  FAILED: "FAILED",
+} as const;
+
+/**
+ * One stage in a Hermes scan pipeline job
+ */
+export interface HermesJobPhase {
+  stage: HermesJobPhaseStage;
+  status: HermesJobPhaseStatus;
+  skippedReason?: string | null;
+  durationMs?: number | null;
+  result?: string | null;
+}
+
+export type HermesJobFinalDirection =
+  | (typeof HermesJobFinalDirection)[keyof typeof HermesJobFinalDirection]
+  | null;
+
+export const HermesJobFinalDirection = {
+  LONG: "LONG",
+  SHORT: "SHORT",
+  WAIT: "WAIT",
+} as const;
+
+export type HermesJobFinalProcessVerdict =
+  | (typeof HermesJobFinalProcessVerdict)[keyof typeof HermesJobFinalProcessVerdict]
+  | null;
+
+export const HermesJobFinalProcessVerdict = {
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  DEGRADED: "DEGRADED",
+} as const;
+
+/**
+ * A single Hermes scan job for one asset through the full pipeline
+ */
+export interface HermesJob {
+  id: string;
+  asset: string;
+  scanStartedAt: string;
+  scanCompletedAt?: string | null;
+  phases: HermesJobPhase[];
+  finalDirection?: HermesJobFinalDirection;
+  finalProcessVerdict?: HermesJobFinalProcessVerdict;
+  setupFamily?: string | null;
+  rejectionCodes: string[];
+  /** Whether this job was triggered manually or by the scheduler */
+  triggered: boolean;
+}
+
+/**
+ * Current state of the Hermes scan loop. The 15-minute scan loop is scaffolded and will be activated when the Hermes Scheduler integration is enabled.
+
+ */
+export interface HermesScanStatus {
+  running: boolean;
+  /** Whether the Hermes 15-minute interval scheduler is active */
+  schedulerActive: boolean;
+  lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  scanIntervalMinutes: number;
+  totalScansToday: number;
+  totalApprovedToday: number;
+  totalWaitToday: number;
+  activeJobs: HermesJob[];
+  recentJobs: HermesJob[];
+  /** Current phase label shown in the control center */
+  phase?: string;
+}
+
+/**
+ * Result of a triggered Hermes scan
+ */
+export interface HermesScanResult {
+  triggeredAt: string;
+  assets: string[];
+  jobIds: string[];
+  message: string;
+}
+
+export type HermesMetricsPeriod =
+  (typeof HermesMetricsPeriod)[keyof typeof HermesMetricsPeriod];
+
+export const HermesMetricsPeriod = {
+  "24H": "24H",
+  "7D": "7D",
+  "30D": "30D",
+} as const;
+
+export type HermesMetricsRejectionCodeBreakdown = { [key: string]: number };
+
+export type HermesMetricsSetupFamilyBreakdown = { [key: string]: number };
+
+/**
+ * Stage accuracy and evaluation metrics. Most rates are derived from the signals table. Outcome-dependent rates (candidateAccuracy, filterAccuracy, noTradeQuality) are null until outcome tracking is live in Phase 3.
+
+ */
+export interface HermesMetrics {
+  period: HermesMetricsPeriod;
+  totalScans: number;
+  /** Scans that produced a non-WAIT direction before DJZS audit */
+  totalCandidates: number;
+  totalApproved: number;
+  totalDegraded: number;
+  totalRejected: number;
+  totalWait: number;
+  /** Fraction of scans ending WAIT. Target > 0.70 in STRICT mode. */
+  waitRate: number;
+  approvalRate: number;
+  avgRROnApproved?: number | null;
+  avgConfidenceOnApproved?: number | null;
+  /** Scaffolded — requires Phase 3 outcome tracking */
+  candidateAccuracy?: number | null;
+  /** Scaffolded — fraction of REJECTED that would have lost if taken */
+  filterAccuracy?: number | null;
+  /** Fraction of APPROVED with OPTIMAL or ACCEPTABLE entry quality */
+  timingAccuracy?: number | null;
+  /** Scaffolded — fraction of WAITs that would have lost if taken */
+  noTradeQuality?: number | null;
+  /** Scaffolded — improvement in accuracy when Browserbase was triggered */
+  researchLift?: number | null;
+  /** Scaffolded — requires delivery + outcome data */
+  alertUsefulness?: number | null;
+  rejectionCodeBreakdown: HermesMetricsRejectionCodeBreakdown;
+  setupFamilyBreakdown: HermesMetricsSetupFamilyBreakdown;
+  /** Number of signals where Pyth confidence affected processVerdict */
+  pythInfluenceCount: number;
+  computedAt: string;
+}
+
+export type EvalReviewItemRecommendation =
+  (typeof EvalReviewItemRecommendation)[keyof typeof EvalReviewItemRecommendation];
+
+export const EvalReviewItemRecommendation = {
+  KEEP: "KEEP",
+  TIGHTEN: "TIGHTEN",
+  LOOSEN: "LOOSEN",
+  REVIEW: "REVIEW",
+} as const;
+
+export interface EvalReviewItem {
+  parameter: string;
+  currentValue: string;
+  observation: string;
+  recommendation: EvalReviewItemRecommendation;
+  rationale: string;
+}
+
+/**
+ * Weekly evaluation report reviewing thresholds, reject conditions, trigger rules, and routing rules. Does not change core doctrine — only surfaces what to review.
+
+ */
+export interface HermesEvaluation {
+  generatedAt: string;
+  periodLabel: string;
+  thresholdReview: EvalReviewItem[];
+  rejectConditionReview: EvalReviewItem[];
+  triggerRuleReview: EvalReviewItem[];
+  routingRuleReview: EvalReviewItem[];
+  overallAssessment: string;
+  /** Always "INTACT" — DJZS doctrine is never modified by evaluation */
+  doctrineStatus: string;
+}
+
+/**
+ * HIGH = ratio < 0.001, MEDIUM = < 0.01, LOW = >= 0.01
+ */
+export type PythPriceDataConfidenceStatus =
+  (typeof PythPriceDataConfidenceStatus)[keyof typeof PythPriceDataConfidenceStatus];
+
+export const PythPriceDataConfidenceStatus = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+/**
+ * Live price and confidence data from the Pyth Network Hermes REST API. Confidence reflects the price band around the reported price. A confidence ratio (confidence/price) below the threshold in HermesConstraints degrades or blocks APPROVED verdicts when pythConfidenceFilter is enabled.
+
+ */
+export interface PythPriceData {
+  asset: string;
+  /** Pyth price feed ID (hex) */
+  pythId: string;
+  price: number;
+  /** Absolute confidence interval (±USD) */
+  confidence: number;
+  /** confidence / price — lower is better */
+  confidenceRatio: number;
+  /** HIGH = ratio < 0.001, MEDIUM = < 0.01, LOW = >= 0.01 */
+  confidenceStatus: PythPriceDataConfidenceStatus;
+  /** Exponential moving average price from Pyth */
+  emaPrice: number;
+  emaConfidence: number;
+  publishTime: string;
+  /** Slots since last update (freshness indicator) */
+  slotAge: number;
+  /** Whether the price is fresh (slotAge < 10) */
+  fresh: boolean;
+  /** Whether this data is currently affecting processVerdict */
+  influencesProcessVerdict: boolean;
+}
+
 export type GetSignalsParams = {
   /**
    * Filter by asset symbol (e.g. ETH, BTC, SOL)
@@ -493,5 +836,22 @@ export const GetSignalsTimeframe = {
 } as const;
 
 export type GetSignalFeedParams = {
+  limit?: number;
+};
+
+export type GetHermesMetricsParams = {
+  period?: GetHermesMetricsPeriod;
+};
+
+export type GetHermesMetricsPeriod =
+  (typeof GetHermesMetricsPeriod)[keyof typeof GetHermesMetricsPeriod];
+
+export const GetHermesMetricsPeriod = {
+  "24H": "24H",
+  "7D": "7D",
+  "30D": "30D",
+} as const;
+
+export type GetHermesJobsParams = {
   limit?: number;
 };

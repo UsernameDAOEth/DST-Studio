@@ -9,6 +9,8 @@ import {
   type HistoricalPrice,
 } from "./defillamaClient";
 import { lastEma, rsi, macd, atr } from "./indicators";
+import { getConstraints } from "../hermes/constraints";
+import { fetchPythPrice } from "../pyth/pythClient";
 
 export type Direction = "LONG" | "SHORT" | "WAIT";
 export type Verdict = "PASS" | "FAIL" | "WAIT";
@@ -274,10 +276,10 @@ function classifySetupFamily(regime: Regime, direction: Direction): SetupFamily 
   return "NO_SETUP";
 }
 
-function assessEntryQuality(currentPrice: number, ema9: number, atr: number, direction: Direction): EntryQuality {
+function assessEntryQuality(currentPrice: number, ema9: number, atr: number, direction: Direction, lateEntryAtrMultiplier = 1.5): EntryQuality {
   if (ema9 === 0 || atr === 0) return "INVALID";
-  if (direction === "LONG" && currentPrice > ema9 + 1.5 * atr) return "LATE";
-  if (direction === "SHORT" && currentPrice < ema9 - 1.5 * atr) return "LATE";
+  if (direction === "LONG" && currentPrice > ema9 + lateEntryAtrMultiplier * atr) return "LATE";
+  if (direction === "SHORT" && currentPrice < ema9 - lateEntryAtrMultiplier * atr) return "LATE";
   
   const entryZoneRange = 0.3 * atr;
   if (direction === "LONG") {
@@ -394,6 +396,7 @@ function buildPreTradeChecklist(thesis: string, regime: Regime, entryZoneLow: nu
 }
 
 export async function computeSignal(asset: string, timeframe = "4H"): Promise<ComputedSignal> {
+  const constraints = getConstraints();
   const startMs = Date.now();
   logger.info({ asset, timeframe }, "Computing signal");
 
@@ -509,7 +512,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
       : currentPrice;
 
   const setupFamily = classifySetupFamily(regime, direction);
-  const entryQuality = assessEntryQuality(currentPrice, ema9Val, atrVal, direction);
+  const entryQuality = assessEntryQuality(currentPrice, ema9Val, atrVal, direction, constraints.lateEntryAtrMultiplier);
   const narrativeRisk = assessNarrativeRisk(regime, reasonCodes, oiContext, direction);
   const rrRatio = computeRR(entryZoneHigh, entryZoneLow, targetZone, invalidationPrice, direction);
 
@@ -522,7 +525,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     direction = "WAIT";
     rejectionCodes.push("NO_INVALIDATION");
   }
-  if (rrRatio < 1.5 && direction !== "WAIT") {
+  if (rrRatio < constraints.minRRThreshold && direction !== "WAIT") {
     direction = "WAIT";
     rejectionCodes.push("RR_BELOW_THRESHOLD");
   }
@@ -548,7 +551,23 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     rejectionCodes.push("CROWDING_TOO_HIGH");
   }
 
-  const finalProcessVerdict = computeProcessVerdict(rejectionCodes, entryQuality, "ADMISSIBLE", narrativeRisk, rrRatio);
+  let finalProcessVerdict = computeProcessVerdict(rejectionCodes, entryQuality, "ADMISSIBLE", narrativeRisk, rrRatio);
+  
+  let whyTrade = generateWhyTrade(direction, finalProcessVerdict, rejectionCodes, setupFamily, rrRatio, entryQuality);
+
+  if (constraints.pythConfidenceFilter) {
+    const pythData = await fetchPythPrice(asset).catch(() => null);
+    if (pythData && pythData.confidenceRatio > (1 - constraints.pythConfidenceThreshold)) {
+      if (!rejectionCodes.includes("CONFIDENCE_STRUCTURE_MISMATCH")) {
+        rejectionCodes.push("CONFIDENCE_STRUCTURE_MISMATCH");
+      }
+      if (finalProcessVerdict === "APPROVED") {
+        finalProcessVerdict = "DEGRADED";
+      }
+      whyTrade += ` Pyth confidence LOW (ratio: ${pythData.confidenceRatio.toFixed(4)}).`;
+    }
+  }
+
   const checks = buildAuditChecks(trendRegime, oiContext, direction, priceSeries);
   const { verdict: auditVerdict, summary: auditSummary } = computeVerdict(checks);
   const logicAdmissibility = computeLogicAdmissibility(finalProcessVerdict, auditVerdict, rejectionCodes);
@@ -566,7 +585,6 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
 
   const rejectIf = buildRejectConditions(asset, regime, ema50Val, atrVal, invalidationPrice);
   const thesis = generateThesis(asset, direction, regime, setupFamily, ema9Val, ema21Val, ema50Val, rsiVal, macdResult.histogram);
-  const whyTrade = generateWhyTrade(direction, finalProcessVerdict, rejectionCodes, setupFamily, rrRatio, entryQuality);
   const preTradChecklist = buildPreTradeChecklist(thesis, regime, entryZoneLow, entryZoneHigh, invalidationPrice, targetZone, reasonCodes, rejectIf, rrRatio);
 
   const outcomeTracking: OutcomeTracking = {

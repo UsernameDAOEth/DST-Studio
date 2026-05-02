@@ -24,6 +24,10 @@ tags:
     description: Chat agent operations
   - name: integrations
     description: Integration scaffold and settings
+  - name: hermes
+    description: Hermes orchestration runtime — scan loop, constraints, metrics, evaluation
+  - name: pyth
+    description: Pyth Network live price and confidence data
 
 paths:
   /healthz:
@@ -326,6 +330,150 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/IntegrationStatus"
+
+  /hermes/status:
+    get:
+      operationId: getHermesStatus
+      tags: [hermes]
+      summary: Get current Hermes scan loop status and job queue
+      responses:
+        "200":
+          description: Hermes status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesScanStatus"
+
+  /hermes/constraints:
+    get:
+      operationId: getHermesConstraints
+      tags: [hermes]
+      summary: Get current Hermes system constraints
+      responses:
+        "200":
+          description: Current constraints
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesConstraints"
+    put:
+      operationId: updateHermesConstraints
+      tags: [hermes]
+      summary: Update Hermes system constraints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HermesConstraintsUpdate"
+      responses:
+        "200":
+          description: Updated constraints
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesConstraints"
+
+  /hermes/metrics:
+    get:
+      operationId: getHermesMetrics
+      tags: [hermes]
+      summary: Get stage accuracy and evaluation metrics
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [24H, 7D, 30D]
+            default: 7D
+      responses:
+        "200":
+          description: Hermes metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesMetrics"
+
+  /hermes/scan:
+    post:
+      operationId: triggerHermesScan
+      tags: [hermes]
+      summary: Trigger a manual Hermes scan for all tracked assets
+      responses:
+        "200":
+          description: Scan job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesScanResult"
+
+  /hermes/evaluation:
+    get:
+      operationId: getHermesEvaluation
+      tags: [hermes]
+      summary: Get weekly evaluation report for threshold and rule review
+      responses:
+        "200":
+          description: Evaluation report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesEvaluation"
+
+  /hermes/jobs:
+    get:
+      operationId: getHermesJobs
+      tags: [hermes]
+      summary: Get recent Hermes job runs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Recent jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HermesJob"
+
+  /pyth/prices:
+    get:
+      operationId: getPythPrices
+      tags: [pyth]
+      summary: Get Pyth Network live price and confidence for all tracked assets
+      responses:
+        "200":
+          description: Pyth price data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PythPriceData"
+
+  /pyth/prices/{asset}:
+    get:
+      operationId: getPythPriceByAsset
+      tags: [pyth]
+      summary: Get Pyth price and confidence for a specific asset
+      parameters:
+        - name: asset
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pyth price data for asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythPriceData"
 
 components:
   schemas:
@@ -846,3 +994,451 @@ components:
         - configured
         - status
         - phase
+
+    HermesConstraints:
+      type: object
+      description: >
+        Durable system constraints managed by Hermes. These are enforced on every
+        scan and are the authoritative source of signal policy. Not opinions — constraints.
+      properties:
+        preferredAssets:
+          type: array
+          items:
+            type: string
+          description: Assets to scan in order of priority (e.g. ["BTC", "ETH", "SOL"])
+        activeTimeframe:
+          type: string
+          enum: [1H, 4H, 1D]
+          description: Active timeframe for all scans
+        minRRThreshold:
+          type: number
+          description: Minimum reward/risk ratio required for APPROVED. Default 1.5.
+        lateEntryAtrMultiplier:
+          type: number
+          description: ATR multiplier for late-entry detection. Default 1.5.
+        oneSignalPerAsset:
+          type: boolean
+          description: Enforce only one active APPROVED signal per asset/timeframe
+        browserbaseTriggerPolicy:
+          type: string
+          enum: [DISABLED, HIGH_CONFIDENCE, APPROVED_ONLY]
+          description: When to trigger Browserbase web research
+        pythConfidenceFilter:
+          type: boolean
+          description: Whether to use Pyth confidence score in processVerdict calculation
+        pythConfidenceThreshold:
+          type: number
+          description: Minimum Pyth confidence ratio (0-1) to allow APPROVED. Default 0.95.
+        alertRouting:
+          type: object
+          properties:
+            telegram:
+              type: boolean
+            xmtp:
+              type: boolean
+            discord:
+              type: boolean
+          required: [telegram, xmtp, discord]
+        waitBiasPolicy:
+          type: string
+          enum: [STRICT, STANDARD, RELAXED]
+          description: >
+            Overall WAIT bias. STRICT = most scans end in WAIT (default).
+            STANDARD = moderate filter. RELAXED = fewer filters.
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - preferredAssets
+        - activeTimeframe
+        - minRRThreshold
+        - lateEntryAtrMultiplier
+        - oneSignalPerAsset
+        - browserbaseTriggerPolicy
+        - pythConfidenceFilter
+        - pythConfidenceThreshold
+        - alertRouting
+        - waitBiasPolicy
+        - updatedAt
+
+    HermesConstraintsUpdate:
+      type: object
+      description: Partial update to Hermes constraints. Only provided fields are updated.
+      properties:
+        preferredAssets:
+          type: array
+          items:
+            type: string
+        activeTimeframe:
+          type: string
+          enum: [1H, 4H, 1D]
+        minRRThreshold:
+          type: number
+        lateEntryAtrMultiplier:
+          type: number
+        oneSignalPerAsset:
+          type: boolean
+        browserbaseTriggerPolicy:
+          type: string
+          enum: [DISABLED, HIGH_CONFIDENCE, APPROVED_ONLY]
+        pythConfidenceFilter:
+          type: boolean
+        pythConfidenceThreshold:
+          type: number
+        alertRouting:
+          type: object
+          properties:
+            telegram:
+              type: boolean
+            xmtp:
+              type: boolean
+            discord:
+              type: boolean
+        waitBiasPolicy:
+          type: string
+          enum: [STRICT, STANDARD, RELAXED]
+
+    HermesScanStatus:
+      type: object
+      description: >
+        Current state of the Hermes scan loop. The 15-minute scan loop is scaffolded
+        and will be activated when the Hermes Scheduler integration is enabled.
+      properties:
+        running:
+          type: boolean
+        schedulerActive:
+          type: boolean
+          description: Whether the Hermes 15-minute interval scheduler is active
+        lastRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        scanIntervalMinutes:
+          type: integer
+        totalScansToday:
+          type: integer
+        totalApprovedToday:
+          type: integer
+        totalWaitToday:
+          type: integer
+        activeJobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesJob"
+        recentJobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesJob"
+        phase:
+          type: string
+          description: Current phase label shown in the control center
+      required:
+        - running
+        - schedulerActive
+        - scanIntervalMinutes
+        - totalScansToday
+        - totalApprovedToday
+        - totalWaitToday
+        - activeJobs
+        - recentJobs
+
+    HermesJob:
+      type: object
+      description: A single Hermes scan job for one asset through the full pipeline
+      properties:
+        id:
+          type: string
+        asset:
+          type: string
+        scanStartedAt:
+          type: string
+          format: date-time
+        scanCompletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        phases:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesJobPhase"
+        finalDirection:
+          type: string
+          enum: [LONG, SHORT, WAIT]
+          nullable: true
+        finalProcessVerdict:
+          type: string
+          enum: [APPROVED, REJECTED, DEGRADED]
+          nullable: true
+        setupFamily:
+          type: string
+          nullable: true
+        rejectionCodes:
+          type: array
+          items:
+            type: string
+        triggered:
+          type: boolean
+          description: Whether this job was triggered manually or by the scheduler
+      required:
+        - id
+        - asset
+        - scanStartedAt
+        - phases
+        - rejectionCodes
+        - triggered
+
+    HermesJobPhase:
+      type: object
+      description: One stage in a Hermes scan pipeline job
+      properties:
+        stage:
+          type: string
+          enum: [DEFILAMMA, PYTH, BROWSERBASE, DJZS_AUDIT, ROUTING]
+        status:
+          type: string
+          enum: [PENDING, RUNNING, COMPLETE, SKIPPED, FAILED]
+        skippedReason:
+          type: string
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        result:
+          type: string
+          nullable: true
+      required:
+        - stage
+        - status
+
+    HermesScanResult:
+      type: object
+      description: Result of a triggered Hermes scan
+      properties:
+        triggeredAt:
+          type: string
+          format: date-time
+        assets:
+          type: array
+          items:
+            type: string
+        jobIds:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+      required:
+        - triggeredAt
+        - assets
+        - jobIds
+        - message
+
+    HermesMetrics:
+      type: object
+      description: >
+        Stage accuracy and evaluation metrics. Most rates are derived from the
+        signals table. Outcome-dependent rates (candidateAccuracy, filterAccuracy,
+        noTradeQuality) are null until outcome tracking is live in Phase 3.
+      properties:
+        period:
+          type: string
+          enum: [24H, 7D, 30D]
+        totalScans:
+          type: integer
+        totalCandidates:
+          type: integer
+          description: Scans that produced a non-WAIT direction before DJZS audit
+        totalApproved:
+          type: integer
+        totalDegraded:
+          type: integer
+        totalRejected:
+          type: integer
+        totalWait:
+          type: integer
+        waitRate:
+          type: number
+          description: Fraction of scans ending WAIT. Target > 0.70 in STRICT mode.
+        approvalRate:
+          type: number
+        avgRROnApproved:
+          type: number
+          nullable: true
+        avgConfidenceOnApproved:
+          type: number
+          nullable: true
+        candidateAccuracy:
+          type: number
+          nullable: true
+          description: Scaffolded — requires Phase 3 outcome tracking
+        filterAccuracy:
+          type: number
+          nullable: true
+          description: Scaffolded — fraction of REJECTED that would have lost if taken
+        timingAccuracy:
+          type: number
+          nullable: true
+          description: Fraction of APPROVED with OPTIMAL or ACCEPTABLE entry quality
+        noTradeQuality:
+          type: number
+          nullable: true
+          description: Scaffolded — fraction of WAITs that would have lost if taken
+        researchLift:
+          type: number
+          nullable: true
+          description: Scaffolded — improvement in accuracy when Browserbase was triggered
+        alertUsefulness:
+          type: number
+          nullable: true
+          description: Scaffolded — requires delivery + outcome data
+        rejectionCodeBreakdown:
+          type: object
+          additionalProperties:
+            type: integer
+        setupFamilyBreakdown:
+          type: object
+          additionalProperties:
+            type: integer
+        pythInfluenceCount:
+          type: integer
+          description: Number of signals where Pyth confidence affected processVerdict
+        computedAt:
+          type: string
+          format: date-time
+      required:
+        - period
+        - totalScans
+        - totalCandidates
+        - totalApproved
+        - totalDegraded
+        - totalRejected
+        - totalWait
+        - waitRate
+        - approvalRate
+        - rejectionCodeBreakdown
+        - setupFamilyBreakdown
+        - pythInfluenceCount
+        - computedAt
+
+    HermesEvaluation:
+      type: object
+      description: >
+        Weekly evaluation report reviewing thresholds, reject conditions, trigger rules,
+        and routing rules. Does not change core doctrine — only surfaces what to review.
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        periodLabel:
+          type: string
+        thresholdReview:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvalReviewItem"
+        rejectConditionReview:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvalReviewItem"
+        triggerRuleReview:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvalReviewItem"
+        routingRuleReview:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvalReviewItem"
+        overallAssessment:
+          type: string
+        doctrineStatus:
+          type: string
+          description: Always "INTACT" — DJZS doctrine is never modified by evaluation
+      required:
+        - generatedAt
+        - periodLabel
+        - thresholdReview
+        - rejectConditionReview
+        - triggerRuleReview
+        - routingRuleReview
+        - overallAssessment
+        - doctrineStatus
+
+    EvalReviewItem:
+      type: object
+      properties:
+        parameter:
+          type: string
+        currentValue:
+          type: string
+        observation:
+          type: string
+        recommendation:
+          type: string
+          enum: [KEEP, TIGHTEN, LOOSEN, REVIEW]
+        rationale:
+          type: string
+      required:
+        - parameter
+        - currentValue
+        - observation
+        - recommendation
+        - rationale
+
+    PythPriceData:
+      type: object
+      description: >
+        Live price and confidence data from the Pyth Network Hermes REST API.
+        Confidence reflects the price band around the reported price. A confidence
+        ratio (confidence/price) below the threshold in HermesConstraints degrades
+        or blocks APPROVED verdicts when pythConfidenceFilter is enabled.
+      properties:
+        asset:
+          type: string
+        pythId:
+          type: string
+          description: Pyth price feed ID (hex)
+        price:
+          type: number
+        confidence:
+          type: number
+          description: Absolute confidence interval (±USD)
+        confidenceRatio:
+          type: number
+          description: confidence / price — lower is better
+        confidenceStatus:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          description: HIGH = ratio < 0.001, MEDIUM = < 0.01, LOW = >= 0.01
+        emaPrice:
+          type: number
+          description: Exponential moving average price from Pyth
+        emaConfidence:
+          type: number
+        publishTime:
+          type: string
+          format: date-time
+        slotAge:
+          type: integer
+          description: Slots since last update (freshness indicator)
+        fresh:
+          type: boolean
+          description: Whether the price is fresh (slotAge < 10)
+        influencesProcessVerdict:
+          type: boolean
+          description: Whether this data is currently affecting processVerdict
+      required:
+        - asset
+        - pythId
+        - price
+        - confidence
+        - confidenceRatio
+        - confidenceStatus
+        - emaPrice
+        - emaConfidence
+        - publishTime
+        - slotAge
+        - fresh
+        - influencesProcessVerdict
