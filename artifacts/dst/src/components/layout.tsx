@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, Bell, Eye, MessageSquare, Settings, Cpu, BarChart2 } from "lucide-react";
+import { Activity, Bell, Eye, MessageSquare, Settings, Cpu, BarChart2, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -13,6 +13,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/agent", icon: MessageSquare, label: "AGENT" },
     { href: "/integrations", icon: Settings, label: "INTEGRATIONS" },
     { href: "/evaluation", icon: BarChart2, label: "EVALUATION" },
+    { href: "/stack", icon: Layers, label: "THE STACK" },
   ];
 
   return (
@@ -21,7 +22,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="hidden md:flex w-64 border-r border-border bg-sidebar flex-col">
         <div className="p-5 border-b border-border flex flex-col justify-center">
           <div className="font-display font-bold text-xl text-primary leading-none tracking-tight">DST</div>
-          <div className="font-mono text-xs text-muted-foreground uppercase mt-1">SIGNAL LAYER</div>
+          <div className="font-mono text-xs text-muted-foreground uppercase mt-1">DECISION LAYER</div>
+          <div className="font-mono text-[10px] text-muted-foreground/60 uppercase mt-1 leading-tight">
+            NOT A CHARTING OR EXECUTION TOOL
+          </div>
         </div>
         
         <nav className="flex-1 p-3 space-y-1">
@@ -45,10 +49,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         
-        <div className="p-4 border-t border-border">
-          <div className="text-xs text-muted-foreground font-mono uppercase">
-            DJZS AUDIT LAYER
-            <div className="mt-1">v1.0.0-PROD</div>
+        <div className="p-4 border-t border-border space-y-1">
+          <div className="text-[10px] text-muted-foreground font-mono uppercase leading-relaxed">
+            <div>DST FINDS · DJZS GATES</div>
+            <div>HERMES RUNS</div>
+            <div className="mt-2 text-muted-foreground/60">v1.0.0-PROD · PAPER MODE</div>
           </div>
         </div>
       </div>

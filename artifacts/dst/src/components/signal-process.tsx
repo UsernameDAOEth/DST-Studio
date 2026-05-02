@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, ShieldOff, ShieldCheck } from "lucide-react";
 import { PreTradeChecklist } from "@workspace/api-client-react";
 
 export function ProcessVerdictBadge({ verdict }: { verdict?: string }) {
@@ -120,6 +120,169 @@ export function PreTradeChecklistPanel({ checklist }: { checklist?: PreTradeChec
               <span key={f} className="opacity-90">{f}</span>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function WaitDecisionPanel({
+  direction,
+  processVerdict,
+  verdictDjzs,
+  rejectionCodes,
+  rejectIf,
+  logicAdmissibility,
+}: {
+  direction: string;
+  processVerdict?: string;
+  verdictDjzs?: string;
+  rejectionCodes?: string[];
+  rejectIf?: string[];
+  logicAdmissibility?: string;
+}) {
+  const isWait = direction === "WAIT";
+  const isRejected = processVerdict === "REJECTED" || verdictDjzs === "FAIL";
+  const isDegraded = processVerdict === "DEGRADED";
+
+  if (!isWait && !isRejected && !isDegraded) return null;
+
+  if (isWait || isRejected) {
+    return (
+      <div className="border border-destructive/40 bg-destructive/5 p-5 space-y-4">
+        <div className="flex items-start gap-3">
+          <ShieldOff className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <div className="font-display text-base text-destructive font-bold mb-1">
+              {isWait ? "NOT A TRADE — DISCIPLINED PASS" : "PROCESS REJECTED"}
+            </div>
+            <div className="font-mono text-xs text-muted-foreground leading-relaxed">
+              {isWait
+                ? "WAIT is a deliberate outcome. The admissibility workflow found insufficient structural evidence for a directional position. This is not a missed opportunity — it is the system working as designed."
+                : "The process engine has rejected this setup. One or more hard rules failed. Review the rejection codes below before reconsidering any directional position."}
+            </div>
+          </div>
+        </div>
+
+        {rejectionCodes && rejectionCodes.length > 0 && (
+          <div>
+            <div className="text-[10px] font-mono uppercase text-destructive/70 mb-2">WHY THIS IS NOT A TRADE</div>
+            <div className="flex flex-wrap gap-2">
+              {rejectionCodes.map(code => (
+                <span key={code} className="chip-fail">{code}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {logicAdmissibility === "INADMISSIBLE" && (
+          <div className="text-xs font-mono text-destructive/80 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-destructive rounded-none shrink-0" />
+            DJZS GATE: SETUP IS LOGICALLY INADMISSIBLE — CANNOT APPROVE REGARDLESS OF MARKET CONDITIONS
+          </div>
+        )}
+
+        {rejectIf && rejectIf.length > 0 && (
+          <div>
+            <div className="text-[10px] font-mono uppercase text-muted-foreground mb-2">ADDITIONAL REJECT CONDITIONS</div>
+            <ul className="space-y-1">
+              {rejectIf.map((cond, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs font-mono text-muted-foreground">
+                  <span className="text-destructive/60 shrink-0">—</span>
+                  <span>{cond}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isDegraded) {
+    return (
+      <div className="border border-[hsl(var(--trade-wait))]/40 bg-[hsl(var(--trade-wait))]/5 p-5 space-y-3">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
+          <div>
+            <div className="font-display text-base text-[hsl(var(--trade-wait))] font-bold mb-1">SIGNAL DEGRADED</div>
+            <div className="font-mono text-xs text-muted-foreground leading-relaxed">
+              This setup passed the structural gate but was degraded by an external confidence layer (Pyth or equivalent). Position sizing and conviction should be reduced accordingly.
+            </div>
+          </div>
+        </div>
+        {rejectionCodes && rejectionCodes.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {rejectionCodes.map(code => (
+              <span key={code} className="chip-warn">{code}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+export function DjzsGateBadge({ verdict, admissibility }: { verdict?: string; admissibility?: string }) {
+  const isPass = verdict === "PASS";
+  const isFail = verdict === "FAIL";
+
+  return (
+    <div className={cn(
+      "border p-4 flex items-start gap-3",
+      isPass ? "border-primary/30 bg-primary/5" : isFail ? "border-destructive/30 bg-destructive/5" : "border-border bg-card"
+    )}>
+      {isPass ? (
+        <ShieldCheck className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+      ) : isFail ? (
+        <ShieldOff className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+      ) : (
+        <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+      )}
+      <div>
+        <div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">DJZS ADMISSIBILITY GATE</div>
+        <div className={cn(
+          "font-display text-sm font-bold",
+          isPass ? "text-primary" : isFail ? "text-destructive" : "text-muted-foreground"
+        )}>
+          {verdict || "---"}
+        </div>
+        {admissibility && (
+          <div className="mt-1">
+            <LogicAdmissibilityBadge admissibility={admissibility} />
+          </div>
+        )}
+        <div className="text-[10px] font-mono text-muted-foreground/70 mt-2 leading-tight">
+          DJZS is deterministic. It does not score setups — it rules them admissible or not.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function RoutingPriorityPanel({ direction, processVerdict }: { direction: string; processVerdict?: string }) {
+  const isApproved = processVerdict === "APPROVED";
+  const isDegraded = processVerdict === "DEGRADED";
+
+  return (
+    <div className="border border-border bg-card p-4">
+      <div className="text-[10px] font-mono uppercase text-muted-foreground mb-2">ROUTING PRIORITY</div>
+      {direction === "WAIT" || !isApproved && !isDegraded ? (
+        <div className="font-mono text-xs text-muted-foreground">
+          <span className="chip-skip mr-2">NONE</span>
+          Setup does not meet routing threshold. No alert or delivery channel will be triggered.
+        </div>
+      ) : isDegraded ? (
+        <div className="font-mono text-xs text-[hsl(var(--trade-wait))]">
+          <span className="chip-warn mr-2">LOW</span>
+          Degraded signals route at reduced priority. Manual review recommended before acting.
+        </div>
+      ) : (
+        <div className="font-mono text-xs text-primary">
+          <span className="chip-pass mr-2">STANDARD</span>
+          Approved signal eligible for configured alert routing (Telegram, XMTP, Discord) when enabled in Hermes.
         </div>
       )}
     </div>

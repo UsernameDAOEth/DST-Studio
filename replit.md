@@ -26,10 +26,13 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
 
-## DST — Deterministic Signal Trader (Phase 3)
+## DST — Deterministic Signal Trader (Phase 4)
 
 ### Purpose
-DST is the **predictive layer** — a disciplined pre-trade process system for perp traders monitoring ETH, BTC, SOL on the 4H timeframe. DJZS is the **admissibility and audit layer**. Every signal is a complete process report with full pre-trade checklist, logic admissibility gate, process verdict, and explicit rejection reasons. WAIT is the default when any required field is missing or any hard rule is violated.
+DST is the **decision layer** — a deterministic pre-trade admissibility system for perp traders. It does not replace charting tools (TradingView) or execution venues (Hyperliquid). It replaces the undisciplined part of the pre-trade process. DST finds possible trades. DJZS decides whether they are admissible. Hermes runs the system. WAIT is not a failure state — it is the correct outcome when no setup meets the admissibility threshold.
+
+**DST is NOT:** a charting platform, an execution venue, a signal subscription service, or a general-purpose intelligence dashboard.
+**DST IS:** a deterministic decision gate with explicit rejection codes, process quality grades, and an audit trail that does not score setups — it rules them in or out.
 
 ### Architecture
 - **Frontend** (`artifacts/dst`): React + Vite DJZS dark terminal UI (near-black #080B0F, acid lime #A3E635)
@@ -103,8 +106,8 @@ DST is the **predictive layer** — a disciplined pre-trade process system for p
 - **MPP** (ENRICHMENT) — institutional flow enrichment, requires `MPP_API_KEY`, Phase 4
 
 ### Frontend Pages
-- `/` Dashboard — asset cards + signal feed (with PROCESS + R/R columns)
-- `/signal/:asset` — full process report (checklist, verdict, rejection codes, assessment, outcome stub)
+- `/` Dashboard (Admissibility Console) — 3-layer positioning strip (DST FINDS / DJZS GATES / HERMES RUNS), asset cards with prominent WAIT panels, signal feed with WAIT-bias framing
+- `/signal/:asset` — Canonical trade packet: header + decision gate (DJZS + process verdict side-by-side) + prominent rejection/WAIT panel + trade parameters + routing priority + thesis + checklist + market evidence
 - `/audit/:asset` — DJZS audit breakdown
 - `/watchlist` — tracked assets
 - `/alerts` — alert configuration
@@ -112,6 +115,7 @@ DST is the **predictive layer** — a disciplined pre-trade process system for p
 - `/integrations` — integration scaffold + live Pyth price confidence display
 - `/hermes` — Hermes operations console (pipeline stages, system constraints editor, subagent roles, job log)
 - `/evaluation` — stage metrics (24H/7D/30D) + weekly policy evaluation with per-parameter recommendations
+- `/stack` — Product positioning: DST vs charting vs execution, "NOT BUILT FOR" section, DST advantage (pre-trade discipline, evidence integration, deterministic audit), full architecture roadmap with phased integration stack, 5-step workflow diagram, operating doctrine
 
 ### Extending
 - Add new assets: update `ASSET_MAP` in `defillamaClient.ts`

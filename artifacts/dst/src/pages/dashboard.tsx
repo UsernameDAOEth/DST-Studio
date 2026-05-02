@@ -3,7 +3,7 @@ import { useGetSignals, useGetMarketSnapshot, useGetSignalFeed } from "@workspac
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ShieldOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProcessVerdictBadge, SetupFamilyLabel } from "@/components/signal-process";
 
@@ -43,9 +43,13 @@ function AssetCard({ asset }: { asset: string }) {
 
   if (!signal || !snapshot) return null;
 
+  const isWait = signal.direction === "WAIT";
+
   return (
-    <Card className="border-border bg-card hover:border-primary/40 transition-colors relative group overflow-hidden">
-      {/* Top accent strip */}
+    <Card className={cn(
+      "border-border bg-card hover:border-primary/40 transition-colors relative group overflow-hidden",
+      isWait && "opacity-90"
+    )}>
       <div className={cn(
         "absolute top-0 left-0 right-0 h-[2px]",
         signal.direction === "LONG" ? "bg-primary" :
@@ -61,7 +65,7 @@ function AssetCard({ asset }: { asset: string }) {
       </CardHeader>
       
       <CardContent className="px-4 py-4">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4">
           <div className="flex justify-between items-end">
             <div>
               <div className="text-3xl font-mono text-foreground leading-none mb-1">{formatCurrency(snapshot.price)}</div>
@@ -72,38 +76,47 @@ function AssetCard({ asset }: { asset: string }) {
                 {snapshot.priceChangePct24h >= 0 ? "+" : ""}{formatPercent(snapshot.priceChangePct24h)}
               </div>
             </div>
-            <div className="flex flex-col items-end">
-              <DirectionChip direction={signal.direction} />
-            </div>
+            <DirectionChip direction={signal.direction} />
           </div>
-          
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-[10px] uppercase text-muted-foreground font-mono">
-              <span>CONFIDENCE</span>
-              <span>{signal.confidence}%</span>
-            </div>
-            <div className="h-[1px] w-full bg-secondary overflow-hidden">
-              <div 
-                className={cn(
-                  "h-full",
-                  signal.direction === "LONG" ? "bg-primary" :
-                  signal.direction === "SHORT" ? "bg-destructive" :
-                  "bg-[hsl(var(--trade-wait))]"
-                )}
-                style={{ width: `${signal.confidence}%` }}
-              />
-            </div>
 
-            <div className="flex justify-between items-center mt-3 pt-3 border-t border-border/50">
-              <div className="flex flex-col gap-1">
-                <ProcessVerdictBadge verdict={signal.processVerdict} />
-                <SetupFamilyLabel family={signal.setupFamily} />
+          {isWait ? (
+            <div className="border border-[hsl(var(--trade-wait))]/30 bg-[hsl(var(--trade-wait))]/5 p-3 flex items-start gap-2">
+              <ShieldOff className="w-3.5 h-3.5 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
+              <div className="text-[10px] font-mono text-muted-foreground uppercase leading-tight">
+                WAIT IS THE CORRECT OUTCOME — NO ADMISSIBLE SETUP FOUND. REVIEW TRADE PACKET FOR REASONS.
               </div>
-              {signal.rrRatio > 0 && (
-                <div className="font-mono text-xs text-foreground">R/R: {signal.rrRatio.toFixed(1)}x</div>
-              )}
             </div>
+          ) : (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[10px] uppercase text-muted-foreground font-mono">
+                <span>CONFIDENCE</span>
+                <span>{signal.confidence}%</span>
+              </div>
+              <div className="h-[1px] w-full bg-secondary overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full",
+                    signal.direction === "LONG" ? "bg-primary" :
+                    signal.direction === "SHORT" ? "bg-destructive" :
+                    "bg-[hsl(var(--trade-wait))]"
+                  )}
+                  style={{ width: `${signal.confidence}%` }}
+                />
+              </div>
+            </div>
+          )}
 
+          <div className="flex justify-between items-center pt-1 border-t border-border/50">
+            <div className="flex flex-col gap-1">
+              <ProcessVerdictBadge verdict={signal.processVerdict} />
+              <SetupFamilyLabel family={signal.setupFamily} />
+            </div>
+            {signal.rrRatio > 0 && !isWait && (
+              <div className={cn(
+                "font-mono text-xs",
+                signal.rrRatio >= 2 ? "text-primary" : signal.rrRatio >= 1.5 ? "text-[hsl(var(--trade-wait))]" : "text-destructive"
+              )}>R/R: {signal.rrRatio.toFixed(1)}x</div>
+            )}
           </div>
         </div>
       </CardContent>
@@ -114,24 +127,64 @@ function AssetCard({ asset }: { asset: string }) {
 export default function Dashboard() {
   const { data: feed, isLoading: isLoadingFeed } = useGetSignalFeed({ limit: 10 });
 
+  const totalWait = feed?.filter(f => f.direction === "WAIT").length ?? 0;
+  const totalFeed = feed?.length ?? 0;
+  const waitPct = totalFeed > 0 ? Math.round((totalWait / totalFeed) * 100) : null;
+
   return (
     <div className="space-y-8 max-w-6xl mx-auto pb-12">
+
+      {/* ── HEADER + LAYER STRIP ── */}
       <div className="pb-4 border-b border-border">
-        <h1 className="text-2xl font-display text-foreground mb-1">DASHBOARD</h1>
-        <p className="text-muted-foreground font-mono text-xs uppercase">4H TIMEFRAME // DETERMINISTIC SIGNALS</p>
-        <div className="mt-2 text-muted-foreground font-mono text-xs border-none">
-          HERMES RUNTIME: STANDBY — MANUAL TRIGGER ONLY  |  POLICY: MOST SCANS END IN WAIT  |  DJZS: FINAL GATE
+        <h1 className="text-2xl font-display text-foreground mb-1">ADMISSIBILITY CONSOLE</h1>
+        <p className="text-muted-foreground font-mono text-xs uppercase mb-3">
+          4H TIMEFRAME // ETH · BTC · SOL // PAPER MODE ONLY
+        </p>
+
+        {/* Three-layer positioning strip */}
+        <div className="grid grid-cols-3 border border-border bg-card">
+          <div className="px-4 py-3 border-r border-border">
+            <div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">① DST FINDS</div>
+            <div className="text-xs font-mono text-foreground leading-tight">
+              Possible trades from DefiLlama data, technical regime, and structure
+            </div>
+          </div>
+          <div className="px-4 py-3 border-r border-border">
+            <div className="text-[10px] font-mono uppercase text-primary mb-1">② DJZS GATES</div>
+            <div className="text-xs font-mono text-foreground leading-tight">
+              Admissibility verdict — deterministic, not predictive, never overridden
+            </div>
+          </div>
+          <div className="px-4 py-3">
+            <div className="text-[10px] font-mono uppercase text-muted-foreground mb-1">③ HERMES RUNS</div>
+            <div className="text-xs font-mono text-foreground leading-tight">
+              Orchestration runtime — constraints, scan loop, Pyth, alert routing
+            </div>
+          </div>
         </div>
+
+        {waitPct !== null && (
+          <div className="mt-2 text-[10px] font-mono text-muted-foreground uppercase">
+            SIGNAL FEED: {waitPct}% WAIT — WAIT IS THE CORRECT OUTCOME WHEN NO SETUP MEETS ADMISSIBILITY THRESHOLD
+          </div>
+        )}
       </div>
 
+      {/* ── ASSET CARDS ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <AssetCard asset="ETH" />
         <AssetCard asset="BTC" />
         <AssetCard asset="SOL" />
       </div>
 
+      {/* ── SIGNAL FEED ── */}
       <div className="space-y-4">
-        <h2 className="text-sm font-mono text-muted-foreground uppercase border-b border-border pb-2">SIGNAL FEED</h2>
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <h2 className="text-sm font-mono text-muted-foreground uppercase">SIGNAL FEED</h2>
+          <div className="text-[10px] font-mono text-muted-foreground uppercase">
+            MOST SCANS END IN WAIT — THIS IS BY DESIGN
+          </div>
+        </div>
         
         <div className="border border-border bg-transparent overflow-hidden">
           <table className="w-full text-sm">
@@ -145,33 +198,28 @@ export default function Dashboard() {
                 <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">PROCESS</th>
                 <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">R/R</th>
                 <th className="px-4 py-2 text-left font-mono font-medium text-xs uppercase">SUMMARY</th>
-                <th className="px-4 py-2 text-right font-mono font-medium text-xs uppercase">ACT</th>
+                <th className="px-4 py-2 text-right font-mono font-medium text-xs uppercase">PKT</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border bg-transparent">
               {isLoadingFeed ? (
                 Array(5).fill(0).map((_, i) => (
                   <tr key={i}>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-20 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-12 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-16 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-10 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-16 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-16 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-10 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-4 w-48 rounded-none bg-muted" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-6 w-6 ml-auto rounded-none bg-muted" /></td>
+                    {Array(9).fill(0).map((_, j) => (
+                      <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full rounded-none bg-muted" /></td>
+                    ))}
                   </tr>
                 ))
               ) : feed?.map((entry) => (
-                <tr key={entry.id} className="hover:bg-card transition-colors group">
+                <tr key={entry.id} className={cn(
+                  "hover:bg-card transition-colors group",
+                  entry.direction === "WAIT" && "opacity-70"
+                )}>
                   <td className="px-4 py-3 font-mono text-muted-foreground whitespace-nowrap">
                     {new Date(entry.computedAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="px-4 py-3 font-display text-foreground font-bold">{entry.asset}</td>
-                  <td className="px-4 py-3">
-                    <DirectionChip direction={entry.direction} />
-                  </td>
+                  <td className="px-4 py-3"><DirectionChip direction={entry.direction} /></td>
                   <td className="px-4 py-3 font-mono">{entry.confidence}%</td>
                   <td className="px-4 py-3"><VerdictChip verdict={entry.verdict} /></td>
                   <td className="px-4 py-3"><ProcessVerdictBadge verdict={entry.processVerdict} /></td>
@@ -180,7 +228,7 @@ export default function Dashboard() {
                       <span className={cn(entry.rrRatio >= 2 ? "text-primary" : entry.rrRatio >= 1.5 ? "text-[hsl(var(--trade-wait))]" : "text-destructive")}>
                         {entry.rrRatio.toFixed(1)}x
                       </span>
-                    ) : "---"}
+                    ) : <span className="text-muted-foreground/50">---</span>}
                   </td>
                   <td className="px-4 py-3 text-body max-w-md truncate">{entry.summary}</td>
                   <td className="px-4 py-3 text-right">
@@ -193,13 +241,13 @@ export default function Dashboard() {
             </tbody>
           </table>
           {!isLoadingFeed && feed?.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground font-mono text-sm uppercase">NO_SIGNALS_FOUND</div>
+            <div className="p-8 text-center text-muted-foreground font-mono text-sm uppercase">NO_SIGNALS_FOUND — TRIGGER A SCAN FROM HERMES</div>
           )}
         </div>
       </div>
       
       <div className="pt-8 mt-8 border-t border-border flex flex-col md:flex-row justify-between text-xs font-mono text-muted-foreground uppercase">
-        <div>DST SIGNAL LAYER — PAPER MODE ONLY</div>
+        <div>DST — DECISION LAYER ONLY. NOT A CHARTING TOOL. NOT AN EXECUTION PLATFORM.</div>
         <div>DJZS AUDIT PROTOCOL — NOT FINANCIAL ADVICE</div>
       </div>
     </div>
