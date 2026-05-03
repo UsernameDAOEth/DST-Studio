@@ -11,6 +11,8 @@ import {
   type HistoricalPrice,
 } from "./defillamaClient";
 import { lastEma, rsi, macd, atr } from "./indicators";
+import { normalizeInputs, hashPacket } from "./normalization";
+import { runFastPathVerification, type VerificationReport } from "./verification";
 import { getConstraints } from "../hermes/constraints";
 import { fetchPythPrice } from "../pyth/pythClient";
 import {
@@ -155,6 +157,8 @@ export interface ComputedSignal {
   preTradChecklist: PreTradeChecklist;
   outcomeTracking: OutcomeTracking;
   dataQuality: DataQualityReport;
+  verificationReport: VerificationReport;
+  packetHash: string;
 }
 
 // ── Pure helper functions (unchanged) ─────────────────────────────────────────
@@ -595,6 +599,37 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   const narrativeRisk = assessNarrativeRisk(regime, reasonCodes, oiContext, direction);
   const rrRatio = computeRR(entryZoneHigh, entryZoneLow, targetZone, invalidationPrice, direction);
 
+  // ── Canonical normalization — strict internal objects, not raw vendor payloads
+  const normalizedPacket = normalizeInputs({
+    asset,
+    timeframe,
+    priceProvenance: priceData?.provenance ?? makeProvenance("FALLBACK_ZERO", new Date(), null, PRICE_STALE_THRESHOLD_MS, true),
+    historyProvenance: histData?.provenance ?? makeProvenance("FALLBACK_ZERO", new Date(), null, 3600000, true),
+    price: currentPrice,
+    historicalBarCount: hist.length,
+    ema9: ema9Val,
+    ema21: ema21Val,
+    ema50: ema50Val,
+    rsiValue: rsiVal,
+    macdHistogram: macdResult.histogram,
+    atr: atrVal,
+    regime,
+    trendStrength,
+    openInterestEstimate: estimatedOI,
+    oiChangePct24h,
+    fundingRate,
+    dominantSide,
+    longShortRatio,
+    tvlValue,
+    globalOiUsd: globalInfo.totalOpenInterestUsd,
+    entryZoneLow,
+    entryZoneHigh,
+    targetZone,
+    invalidationPrice,
+    rrRatio,
+  });
+  const packetHash = hashPacket(normalizedPacket);
+
   // ── Hard execution rules ────────────────────────────────────────────────────
   if (regime === "UNDEFINED") {
     direction = "WAIT";
@@ -701,6 +736,19 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     }
   }
 
+  // ── Fast-path verification — additive structured layer before DJZS audit ────
+  // Runs 10 explicit hard/soft checks on the normalized packet.
+  // Hermes findings are evidence only and are never read here.
+  const verificationReport = runFastPathVerification({
+    normalizedPacket,
+    packetHash,
+    direction,
+    minRRThreshold: constraints.minRRThreshold,
+    entryQuality,
+    minHistoryBars: MIN_HISTORY_BARS,
+    pythVerdict: pythVerifier.verdict as "CONFIRMS" | "DIVERGES" | "UNAVAILABLE" | "SKIPPED",
+  });
+
   // ── DJZS audit ──────────────────────────────────────────────────────────────
   const checks = buildAuditChecks(trendRegime, oiContext, direction, priceSeries);
   const { verdict: auditVerdict, summary: auditSummary } = computeVerdict(checks);
@@ -802,6 +850,8 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     preTradChecklist,
     outcomeTracking,
     dataQuality,
+    verificationReport,
+    packetHash,
   };
 }
 

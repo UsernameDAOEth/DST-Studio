@@ -14,6 +14,7 @@ import type { OutcomeTracking } from "./outcomeTracking";
 import type { PreTradeChecklist } from "./preTradeChecklist";
 import type { Signal } from "./signal";
 import type { TrendRegime } from "./trendRegime";
+import type { VerificationReport } from "./verificationReport";
 
 export type SignalDetail = Signal & {
   marketSnapshot?: MarketSnapshot;
@@ -28,4 +29,10 @@ export type SignalDetail = Signal & {
   /** Active Hermes monitoring findings adapted as read-only audit context for this trade packet. Confidence and suggested flags from findings are metadata only — they never influence the DJZS verdict. Null when no active findings exist for this asset.
    */
   hermesContext?: HermesFindingsContext;
+  /** Structured fast-path verification report for the canonical normalized input packet. Exposes per-check results with explicit failure-mode codes, source dependencies, and hard/soft classification. Hard failures short-circuit to WAIT immediately. Hermes findings are evidence only and have no role in this report.
+   */
+  verificationReport?: VerificationReport;
+  /** SHA-256 content hash (first 16 hex chars) of the canonical normalized input packet. Same normalized input always produces the same hash — enabling deterministic identity and replay verification.
+   */
+  packetHash?: string;
 };

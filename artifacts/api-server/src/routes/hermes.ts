@@ -55,9 +55,10 @@ router.post("/findings", async (req, res) => {
     });
     return;
   }
-  const finding = await ingestFinding(parsed.data);
-  res.status(201).json({
+  const { finding, deduplicated } = await ingestFinding(parsed.data);
+  res.status(deduplicated ? 200 : 201).json({
     accepted: true,
+    deduplicated,
     findingId: finding.findingId,
     target: finding.target,
     boundaryReminder: BOUNDARY_REMINDER,

@@ -57,6 +57,8 @@ async function getOrComputeSignal(asset: string) {
       openInterestContext: signal.openInterestContext as unknown as Record<string, unknown>,
       auditReport: signal.auditReport as unknown as Record<string, unknown>,
       dataQuality: signal.dataQuality as unknown as Record<string, unknown>,
+      verificationReport: signal.verificationReport as unknown as Record<string, unknown>,
+      packetHash: signal.packetHash,
     })
     .returning();
   return inserted;
@@ -152,6 +154,8 @@ router.get("/:asset", async (req, res) => {
     preTradChecklist: row.preTradChecklist,
     outcomeTracking: row.outcomeTracking,
     dataQuality: row.dataQuality,
+    verificationReport: row.verificationReport,
+    packetHash: row.packetHash,
   });
 });
 

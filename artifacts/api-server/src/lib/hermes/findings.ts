@@ -95,8 +95,23 @@ function toPublic(f: HermesFinding): HermesFindingPublic {
 
 export async function ingestFinding(
   payload: SubmitFindingPayload,
-): Promise<HermesFindingPublic> {
+): Promise<{ finding: HermesFindingPublic; deduplicated: boolean }> {
   const findingId = payload.finding_id ?? randomUUID();
+
+  // Replay-safe: if finding_id already exists, return the existing record
+  // without inserting a duplicate (idempotent ingestion).
+  const existing = findingId
+    ? await db
+        .select()
+        .from(hermesFindingsTable)
+        .where(eq(hermesFindingsTable.findingId, findingId))
+        .limit(1)
+    : [];
+
+  if (existing.length > 0) {
+    return { finding: toPublic(existing[0]), deduplicated: true };
+  }
+
   const [inserted] = await db
     .insert(hermesFindingsTable)
     .values({
@@ -114,7 +129,7 @@ export async function ingestFinding(
       expiresAt: payload.expires_at ? new Date(payload.expires_at) : null,
     })
     .returning();
-  return toPublic(inserted);
+  return { finding: toPublic(inserted), deduplicated: false };
 }
 
 export async function getFindingsForTarget(

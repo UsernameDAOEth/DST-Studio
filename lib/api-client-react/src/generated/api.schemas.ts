@@ -561,6 +561,104 @@ export interface HermesFindingsContext {
   attachedAt: string;
 }
 
+export type VerificationCheckCode =
+  (typeof VerificationCheckCode)[keyof typeof VerificationCheckCode];
+
+export const VerificationCheckCode = {
+  PRICE_NOT_ZERO: "PRICE_NOT_ZERO",
+  MARKET_DATA_FRESH: "MARKET_DATA_FRESH",
+  HISTORY_SUFFICIENT: "HISTORY_SUFFICIENT",
+  REGIME_EXISTS: "REGIME_EXISTS",
+  INVALIDATION_EXISTS: "INVALIDATION_EXISTS",
+  RR_THRESHOLD: "RR_THRESHOLD",
+  ENTRY_NOT_LATE: "ENTRY_NOT_LATE",
+  SIGNAL_REGIME_ALIGNED: "SIGNAL_REGIME_ALIGNED",
+  SOURCES_CONSISTENT: "SOURCES_CONSISTENT",
+  PYTH_CONFIRMS: "PYTH_CONFIRMS",
+} as const;
+
+export type VerificationCheckStatus =
+  (typeof VerificationCheckStatus)[keyof typeof VerificationCheckStatus];
+
+export const VerificationCheckStatus = {
+  PASS: "PASS",
+  FAIL: "FAIL",
+  WARN: "WARN",
+  SKIP: "SKIP",
+} as const;
+
+export type VerificationCheckFailureModeCode =
+  | (typeof VerificationCheckFailureModeCode)[keyof typeof VerificationCheckFailureModeCode]
+  | null;
+
+export const VerificationCheckFailureModeCode = {
+  DETERMINISM_VIOLATION: "DETERMINISM_VIOLATION",
+  INPUT_NORMALIZATION_ERROR: "INPUT_NORMALIZATION_ERROR",
+  STALE_MARKET_STATE: "STALE_MARKET_STATE",
+  MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
+  CONFLICTING_SOURCE_DATA: "CONFLICTING_SOURCE_DATA",
+  SEMANTIC_LAYER_UNAVAILABLE: "SEMANTIC_LAYER_UNAVAILABLE",
+  FALLBACK_ONLY_MODE: "FALLBACK_ONLY_MODE",
+} as const;
+
+/**
+ * Per-check result from the fast-path verification tier. Each check exposes its code, pass/fail/warn/skip status, a human-readable detail string, the source dependency it reads from, whether it is a hard fail (which short-circuits verification), and an optional failure mode code.
+
+ */
+export interface VerificationCheck {
+  code: VerificationCheckCode;
+  status: VerificationCheckStatus;
+  detail: string;
+  /** The data source this check reads from (e.g. DEFILLAMA_COINS, DERIVED, PYTH_HERMES). */
+  sourceDependency: string;
+  /** True when this check failing causes immediate short-circuit to WAIT. */
+  isHardFail: boolean;
+  failureModeCode?: VerificationCheckFailureModeCode;
+}
+
+export type VerificationReportFailureCodesItem =
+  (typeof VerificationReportFailureCodesItem)[keyof typeof VerificationReportFailureCodesItem];
+
+export const VerificationReportFailureCodesItem = {
+  DETERMINISM_VIOLATION: "DETERMINISM_VIOLATION",
+  INPUT_NORMALIZATION_ERROR: "INPUT_NORMALIZATION_ERROR",
+  STALE_MARKET_STATE: "STALE_MARKET_STATE",
+  MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
+  CONFLICTING_SOURCE_DATA: "CONFLICTING_SOURCE_DATA",
+  SEMANTIC_LAYER_UNAVAILABLE: "SEMANTIC_LAYER_UNAVAILABLE",
+  FALLBACK_ONLY_MODE: "FALLBACK_ONLY_MODE",
+} as const;
+
+/**
+ * Full structured verification report for the normalized input packet. Runs before the DJZS audit. Exposes per-check results with failure-mode codes, degraded state, fallback-only mode, and whether the semantic layer is allowed. Hard failures short-circuit immediately. Hermes findings are EVIDENCE ONLY — they cannot drive or override any check in this report.
+
+ */
+export interface VerificationReport {
+  /** SHA-256 content hash (first 16 hex chars) of the canonical normalized packet. */
+  packetHash: string;
+  /** True when input normalization encountered critical errors. */
+  normalizationError: boolean;
+  /** True when all hard-fail checks passed. */
+  fastPathPassed: boolean;
+  /** True when a hard fail caused early exit before all checks ran. */
+  shortCircuited: boolean;
+  shortCircuitReason?: string | null;
+  checks: VerificationCheck[];
+  /** Deduplicated failure mode codes from all failed/warned checks. */
+  failureCodes: VerificationReportFailureCodesItem[];
+  /** True when any hard fail or soft warn is present. */
+  degradedState: boolean;
+  /** True when FALLBACK_ONLY_MODE failure code is present. */
+  fallbackOnlyMode: boolean;
+  /** True when fast path passes entirely and no critical normalization error exists. Semantic or narrative checks are subordinate and only run when this is true.
+   */
+  semanticLayerAllowed: boolean;
+  /** Always true. Enforces the boundary doctrine: Hermes findings are evidence context only. They cannot contribute to verification outcomes, scores, or verdicts.
+   */
+  hermesEvidenceOnly: boolean;
+  verifiedAt: string;
+}
+
 export type SignalDetail = Signal & {
   marketSnapshot?: MarketSnapshot;
   trendRegime?: TrendRegime;
@@ -574,6 +672,12 @@ export type SignalDetail = Signal & {
   /** Active Hermes monitoring findings adapted as read-only audit context for this trade packet. Confidence and suggested flags from findings are metadata only — they never influence the DJZS verdict. Null when no active findings exist for this asset.
    */
   hermesContext?: HermesFindingsContext;
+  /** Structured fast-path verification report for the canonical normalized input packet. Exposes per-check results with explicit failure-mode codes, source dependencies, and hard/soft classification. Hard failures short-circuit to WAIT immediately. Hermes findings are evidence only and have no role in this report.
+   */
+  verificationReport?: VerificationReport;
+  /** SHA-256 content hash (first 16 hex chars) of the canonical normalized input packet. Same normalized input always produces the same hash — enabling deterministic identity and replay verification.
+   */
+  packetHash?: string;
 };
 
 export interface WatchlistEntry {

@@ -32,6 +32,8 @@ export const signalsTable = pgTable("signals", {
   openInterestContext: jsonb("open_interest_context").$type<Record<string, unknown>>(),
   auditReport: jsonb("audit_report").$type<Record<string, unknown>>(),
   dataQuality: jsonb("data_quality").$type<Record<string, unknown>>(),
+  verificationReport: jsonb("verification_report").$type<Record<string, unknown>>(),
+  packetHash: text("packet_hash"),
   computedAt: timestamp("computed_at").notNull().defaultNow(),
 });
 

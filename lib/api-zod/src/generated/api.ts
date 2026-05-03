@@ -685,6 +685,113 @@ export const GetSignalByAssetResponse = zod
         .describe(
           "Active Hermes monitoring findings adapted as read-only audit context for this trade packet. Confidence and suggested flags from findings are metadata only — they never influence the DJZS verdict. Null when no active findings exist for this asset.\n",
         ),
+      verificationReport: zod
+        .object({
+          packetHash: zod
+            .string()
+            .describe(
+              "SHA-256 content hash (first 16 hex chars) of the canonical normalized packet.",
+            ),
+          normalizationError: zod
+            .boolean()
+            .describe(
+              "True when input normalization encountered critical errors.",
+            ),
+          fastPathPassed: zod
+            .boolean()
+            .describe("True when all hard-fail checks passed."),
+          shortCircuited: zod
+            .boolean()
+            .describe(
+              "True when a hard fail caused early exit before all checks ran.",
+            ),
+          shortCircuitReason: zod.string().nullish(),
+          checks: zod.array(
+            zod
+              .object({
+                code: zod.enum([
+                  "PRICE_NOT_ZERO",
+                  "MARKET_DATA_FRESH",
+                  "HISTORY_SUFFICIENT",
+                  "REGIME_EXISTS",
+                  "INVALIDATION_EXISTS",
+                  "RR_THRESHOLD",
+                  "ENTRY_NOT_LATE",
+                  "SIGNAL_REGIME_ALIGNED",
+                  "SOURCES_CONSISTENT",
+                  "PYTH_CONFIRMS",
+                ]),
+                status: zod.enum(["PASS", "FAIL", "WARN", "SKIP"]),
+                detail: zod.string(),
+                sourceDependency: zod
+                  .string()
+                  .describe(
+                    "The data source this check reads from (e.g. DEFILLAMA_COINS, DERIVED, PYTH_HERMES).",
+                  ),
+                isHardFail: zod
+                  .boolean()
+                  .describe(
+                    "True when this check failing causes immediate short-circuit to WAIT.",
+                  ),
+                failureModeCode: zod
+                  .enum([
+                    "DETERMINISM_VIOLATION",
+                    "INPUT_NORMALIZATION_ERROR",
+                    "STALE_MARKET_STATE",
+                    "MISSING_REQUIRED_FIELD",
+                    "CONFLICTING_SOURCE_DATA",
+                    "SEMANTIC_LAYER_UNAVAILABLE",
+                    "FALLBACK_ONLY_MODE",
+                  ])
+                  .nullish(),
+              })
+              .describe(
+                "Per-check result from the fast-path verification tier. Each check exposes its code, pass\/fail\/warn\/skip status, a human-readable detail string, the source dependency it reads from, whether it is a hard fail (which short-circuits verification), and an optional failure mode code.\n",
+              ),
+          ),
+          failureCodes: zod
+            .array(
+              zod.enum([
+                "DETERMINISM_VIOLATION",
+                "INPUT_NORMALIZATION_ERROR",
+                "STALE_MARKET_STATE",
+                "MISSING_REQUIRED_FIELD",
+                "CONFLICTING_SOURCE_DATA",
+                "SEMANTIC_LAYER_UNAVAILABLE",
+                "FALLBACK_ONLY_MODE",
+              ]),
+            )
+            .describe(
+              "Deduplicated failure mode codes from all failed\/warned checks.",
+            ),
+          degradedState: zod
+            .boolean()
+            .describe("True when any hard fail or soft warn is present."),
+          fallbackOnlyMode: zod
+            .boolean()
+            .describe("True when FALLBACK_ONLY_MODE failure code is present."),
+          semanticLayerAllowed: zod
+            .boolean()
+            .describe(
+              "True when fast path passes entirely and no critical normalization error exists. Semantic or narrative checks are subordinate and only run when this is true.\n",
+            ),
+          hermesEvidenceOnly: zod
+            .boolean()
+            .describe(
+              "Always true. Enforces the boundary doctrine: Hermes findings are evidence context only. They cannot contribute to verification outcomes, scores, or verdicts.\n",
+            ),
+          verifiedAt: zod.coerce.date(),
+        })
+        .optional()
+        .describe(
+          "Structured fast-path verification report for the canonical normalized input packet. Exposes per-check results with explicit failure-mode codes, source dependencies, and hard\/soft classification. Hard failures short-circuit to WAIT immediately. Hermes findings are evidence only and have no role in this report.\n",
+        ),
+      packetHash: zod
+        .string()
+        .optional()
+        .describe(
+          "SHA-256 content hash (first 16 hex chars) of the canonical normalized input packet. Same normalized input always produces the same hash — enabling deterministic identity and replay verification.\n",
+        ),
     }),
   );
 

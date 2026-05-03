@@ -18,6 +18,7 @@ import {
   RoutingPriorityPanel,
 } from "@/components/signal-process";
 import { DataQualityPanel } from "@/components/data-quality";
+import { VerificationPanel } from "@/components/verification-panel";
 import { HermesTargetFindingsPanel } from "@/components/hermes-findings";
 
 function DirectionChip({ direction }: { direction: string }) {
@@ -235,7 +236,7 @@ export default function SignalDetail() {
       </div>
 
       {/* ── ROUTING ── */}
-      <RoutingPriorityPanel direction={signal.direction} processVerdict={signal.processVerdict} />
+      <RoutingPriorityPanel direction={signal.direction as string} processVerdict={signal.processVerdict as string | undefined} />
 
       {/* ── THESIS + ASSESSMENT ── */}
       {(signal.thesis || signal.whyTrade) && (
@@ -407,6 +408,11 @@ export default function SignalDetail() {
       {/* ── DATA QUALITY & PROVENANCE ── */}
       {signal.dataQuality && (
         <DataQualityPanel dataQuality={signal.dataQuality as Parameters<typeof DataQualityPanel>[0]["dataQuality"]} />
+      )}
+
+      {/* ── PACKET VERIFICATION ── */}
+      {signal.verificationReport && (
+        <VerificationPanel report={signal.verificationReport as unknown as Parameters<typeof VerificationPanel>[0]["report"]} />
       )}
 
       {/* ── HERMES CONTEXT ── */}

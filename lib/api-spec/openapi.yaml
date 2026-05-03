@@ -722,6 +722,21 @@ components:
                 context for this trade packet. Confidence and suggested flags
                 from findings are metadata only — they never influence the DJZS
                 verdict. Null when no active findings exist for this asset.
+            verificationReport:
+              $ref: "#/components/schemas/VerificationReport"
+              description: >
+                Structured fast-path verification report for the canonical
+                normalized input packet. Exposes per-check results with explicit
+                failure-mode codes, source dependencies, and hard/soft
+                classification. Hard failures short-circuit to WAIT immediately.
+                Hermes findings are evidence only and have no role in this report.
+            packetHash:
+              type: string
+              description: >
+                SHA-256 content hash (first 16 hex chars) of the canonical
+                normalized input packet. Same normalized input always produces
+                the same hash — enabling deterministic identity and replay
+                verification.
 
     PreTradeChecklist:
       type: object
@@ -1933,6 +1948,126 @@ components:
         - target
         - boundaryReminder
         - createdAt
+
+    VerificationCheck:
+      type: object
+      description: >
+        Per-check result from the fast-path verification tier. Each check
+        exposes its code, pass/fail/warn/skip status, a human-readable detail
+        string, the source dependency it reads from, whether it is a hard fail
+        (which short-circuits verification), and an optional failure mode code.
+      properties:
+        code:
+          type: string
+          enum:
+            - PRICE_NOT_ZERO
+            - MARKET_DATA_FRESH
+            - HISTORY_SUFFICIENT
+            - REGIME_EXISTS
+            - INVALIDATION_EXISTS
+            - RR_THRESHOLD
+            - ENTRY_NOT_LATE
+            - SIGNAL_REGIME_ALIGNED
+            - SOURCES_CONSISTENT
+            - PYTH_CONFIRMS
+        status:
+          type: string
+          enum: [PASS, FAIL, WARN, SKIP]
+        detail:
+          type: string
+        sourceDependency:
+          type: string
+          description: The data source this check reads from (e.g. DEFILLAMA_COINS, DERIVED, PYTH_HERMES).
+        isHardFail:
+          type: boolean
+          description: True when this check failing causes immediate short-circuit to WAIT.
+        failureModeCode:
+          type: string
+          nullable: true
+          enum:
+            - DETERMINISM_VIOLATION
+            - INPUT_NORMALIZATION_ERROR
+            - STALE_MARKET_STATE
+            - MISSING_REQUIRED_FIELD
+            - CONFLICTING_SOURCE_DATA
+            - SEMANTIC_LAYER_UNAVAILABLE
+            - FALLBACK_ONLY_MODE
+      required: [code, status, detail, sourceDependency, isHardFail]
+
+    VerificationReport:
+      type: object
+      description: >
+        Full structured verification report for the normalized input packet.
+        Runs before the DJZS audit. Exposes per-check results with failure-mode
+        codes, degraded state, fallback-only mode, and whether the semantic layer
+        is allowed. Hard failures short-circuit immediately. Hermes findings are
+        EVIDENCE ONLY — they cannot drive or override any check in this report.
+      properties:
+        packetHash:
+          type: string
+          description: SHA-256 content hash (first 16 hex chars) of the canonical normalized packet.
+        normalizationError:
+          type: boolean
+          description: True when input normalization encountered critical errors.
+        fastPathPassed:
+          type: boolean
+          description: True when all hard-fail checks passed.
+        shortCircuited:
+          type: boolean
+          description: True when a hard fail caused early exit before all checks ran.
+        shortCircuitReason:
+          type: string
+          nullable: true
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/VerificationCheck"
+        failureCodes:
+          type: array
+          items:
+            type: string
+            enum:
+              - DETERMINISM_VIOLATION
+              - INPUT_NORMALIZATION_ERROR
+              - STALE_MARKET_STATE
+              - MISSING_REQUIRED_FIELD
+              - CONFLICTING_SOURCE_DATA
+              - SEMANTIC_LAYER_UNAVAILABLE
+              - FALLBACK_ONLY_MODE
+          description: Deduplicated failure mode codes from all failed/warned checks.
+        degradedState:
+          type: boolean
+          description: True when any hard fail or soft warn is present.
+        fallbackOnlyMode:
+          type: boolean
+          description: True when FALLBACK_ONLY_MODE failure code is present.
+        semanticLayerAllowed:
+          type: boolean
+          description: >
+            True when fast path passes entirely and no critical normalization
+            error exists. Semantic or narrative checks are subordinate and only
+            run when this is true.
+        hermesEvidenceOnly:
+          type: boolean
+          description: >
+            Always true. Enforces the boundary doctrine: Hermes findings are
+            evidence context only. They cannot contribute to verification
+            outcomes, scores, or verdicts.
+        verifiedAt:
+          type: string
+          format: date-time
+      required:
+        - packetHash
+        - normalizationError
+        - fastPathPassed
+        - shortCircuited
+        - checks
+        - failureCodes
+        - degradedState
+        - fallbackOnlyMode
+        - semanticLayerAllowed
+        - hermesEvidenceOnly
+        - verifiedAt
 
     HermesFindingsContext:
       type: object
