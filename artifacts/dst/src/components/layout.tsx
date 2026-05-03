@@ -26,8 +26,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest mt-1.5 leading-tight">
             DETERMINISTIC SIGNAL TRADING
           </div>
-          <div className="font-mono text-[8px] text-muted-foreground/40 uppercase tracking-widest mt-1 leading-tight">
-            AUDIT-FIRST · PAPER MODE ONLY
+          <div className="font-mono text-[8px] text-primary/50 uppercase tracking-widest mt-1 leading-tight">
+            A DJZS SYSTEM MODULE
           </div>
         </div>
 
@@ -60,7 +60,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="text-[8px] text-primary/70 font-mono uppercase tracking-widest font-bold">
               DST SIGNALS · DJZS AUDITS · HERMES RUNS
             </div>
-            <div className="text-[8px] text-muted-foreground/40 font-mono uppercase tracking-widest mt-1">
+            <div className="text-[8px] text-muted-foreground/50 font-mono uppercase tracking-widest mt-1 leading-tight">
+              BUILT ON THE DETERMINISTIC SIMULATION THESIS
+            </div>
+            <div className="text-[8px] text-muted-foreground/30 font-mono uppercase tracking-widest mt-1">
               V1.0.0 · PAPER MODE · NO LIVE TRADING
             </div>
           </div>

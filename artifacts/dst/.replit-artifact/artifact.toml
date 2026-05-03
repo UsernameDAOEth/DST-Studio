@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "DST — Crypto Signal Assistant"
+title = "DST — Deterministic Signal Trading"
 version = "1.0.0"
 id = "artifacts/dst"
 router = "path"
