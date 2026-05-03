@@ -121,6 +121,9 @@ export const GetSignalByAssetParams = zod.object({
   asset: zod.coerce.string(),
 });
 
+export const getSignalByAssetResponseTwoHermesContextActiveFindingsItemConfidenceMin = 0;
+export const getSignalByAssetResponseTwoHermesContextActiveFindingsItemConfidenceMax = 1;
+
 export const GetSignalByAssetResponse = zod
   .object({
     id: zod.number(),
@@ -563,6 +566,124 @@ export const GetSignalByAssetResponse = zod
         .optional()
         .describe(
           "Data provenance and quality report for this signal. Surfaces source hierarchy, freshness, quality flags, and the Pyth secondary verifier result. Degrade or WAIT signals appear here when data quality falls below threshold.\n",
+        ),
+      hermesContext: zod
+        .object({
+          findingCount: zod.number(),
+          activeFindings: zod.array(
+            zod
+              .object({
+                findingId: zod.string(),
+                runId: zod
+                  .string()
+                  .nullish()
+                  .describe("Groups findings from the same agent run"),
+                sourceAgent: zod
+                  .string()
+                  .describe(
+                    "Identifier of the Hermes sub-agent that submitted this finding",
+                  ),
+                marketType: zod.enum([
+                  "PERP",
+                  "SPOT",
+                  "CROSS_MARKET",
+                  "PROTOCOL",
+                ]),
+                target: zod
+                  .string()
+                  .describe(
+                    "Asset symbol this finding is about (e.g. ETH, BTC)",
+                  ),
+                observationType: zod.enum([
+                  "FUNDING_RATE",
+                  "OPEN_INTEREST",
+                  "LIQUIDATION_CLUSTER",
+                  "THESIS_EVENT",
+                  "NEWS",
+                  "PROTOCOL_EVENT",
+                  "PRICE_ACTION",
+                  "WALLET_ACTIVITY",
+                  "CUSTOM",
+                ]),
+                summary: zod
+                  .string()
+                  .describe(
+                    "Plain observation text. What was observed — not conclusions.",
+                  ),
+                evidence: zod.array(
+                  zod
+                    .object({
+                      source: zod
+                        .string()
+                        .describe(
+                          'Human-readable source name (e.g. \"DefiLlama\", \"on-chain tx\")',
+                        ),
+                      url: zod
+                        .string()
+                        .optional()
+                        .describe("Optional URL to the source"),
+                      excerpt: zod
+                        .string()
+                        .optional()
+                        .describe(
+                          "Brief excerpt or observation text (max 500 chars)",
+                        ),
+                      timestamp: zod.coerce
+                        .date()
+                        .optional()
+                        .describe(
+                          "When this evidence was observed (not when the finding was submitted)",
+                        ),
+                      reliability: zod
+                        .enum([
+                          "VERIFIED",
+                          "UNVERIFIED",
+                          "CONFLICTING",
+                          "STALE",
+                        ])
+                        .describe(
+                          "VERIFIED = confirmed from authoritative source. UNVERIFIED = not yet confirmed. CONFLICTING = contradicts other evidence. STALE = evidence is older than the expected freshness window.\n",
+                        ),
+                    })
+                    .describe(
+                      "A single source-aware evidence item attached to a Hermes finding.",
+                    ),
+                ),
+                confidence: zod
+                  .number()
+                  .min(
+                    getSignalByAssetResponseTwoHermesContextActiveFindingsItemConfidenceMin,
+                  )
+                  .max(
+                    getSignalByAssetResponseTwoHermesContextActiveFindingsItemConfidenceMax,
+                  )
+                  .describe(
+                    "Metadata only — never used for scoring or verdict computation. Reflects Hermes certainty about the observation, not about trade direction.\n",
+                  ),
+                suggestedFlags: zod
+                  .array(zod.string())
+                  .describe(
+                    "Hint flags for analyst review (e.g. CROWDING_RISK, THESIS_RELEVANT). Hints only — not verdicts, not rejection codes. DJZS does not read these.\n",
+                  ),
+                status: zod.enum(["ACTIVE", "EXPIRED", "SUPERSEDED"]),
+                expiresAt: zod.coerce.date().nullish(),
+                createdAt: zod.coerce.date(),
+              })
+              .describe(
+                "A normalized Hermes agent finding. Hermes observes markets, protocols, wallets, news, funding, open interest, liquidations, and thesis-relevant events. Hermes does NOT approve trades, reject trades, execute trades, produce final scores or verdicts, or override DJZS. Confidence is metadata only. Suggested flags are hints — not decisions. If evidence is weak, incomplete, stale, or conflicting, that is explicitly surfaced.\n",
+              ),
+          ),
+          suggestedFlagHints: zod
+            .array(zod.string())
+            .describe(
+              "Deduplicated hint flags from all active findings. For analyst review only.",
+            ),
+          boundaryReminder: zod.string(),
+          attachedAt: zod.coerce.date(),
+        })
+        .optional()
+        .describe(
+          "Active Hermes monitoring findings adapted as read-only audit context for this trade packet. Confidence and suggested flags from findings are metadata only — they never influence the DJZS verdict. Null when no active findings exist for this asset.\n",
         ),
     }),
   );
@@ -1292,6 +1413,290 @@ export const GetHermesJobsResponseItem = zod
   })
   .describe("A single Hermes scan job for one asset through the full pipeline");
 export const GetHermesJobsResponse = zod.array(GetHermesJobsResponseItem);
+
+/**
+ * Protected ingress endpoint for Hermes agent findings. Hermes submits structured observations only — confidence is metadata, suggested flags are hints, not verdicts. DJZS remains the sole deterministic audit gate. Findings are stored and optionally attached to trade packets as read-only context. Hermes never approves, rejects, scores, or overrides DJZS.
+
+ * @summary Submit a structured Hermes monitoring finding (evidence ingress)
+ */
+export const submitHermesFindingBodyMarketTypeDefault = `PERP`;
+export const submitHermesFindingBodyEvidenceDefault = [];
+export const submitHermesFindingBodyConfidenceMin = 0;
+export const submitHermesFindingBodyConfidenceMax = 1;
+
+export const submitHermesFindingBodySuggestedFlagsDefault = [];
+
+export const SubmitHermesFindingBody = zod
+  .object({
+    finding_id: zod
+      .string()
+      .optional()
+      .describe("Optional client-supplied ID. A UUID is generated if omitted."),
+    run_id: zod
+      .string()
+      .optional()
+      .describe(
+        "Optional run identifier to group findings from the same agent session",
+      ),
+    source_agent: zod
+      .string()
+      .describe("Identifier of the Hermes sub-agent submitting this finding"),
+    market_type: zod
+      .enum(["PERP", "SPOT", "CROSS_MARKET", "PROTOCOL"])
+      .default(submitHermesFindingBodyMarketTypeDefault),
+    target: zod
+      .string()
+      .describe("Asset symbol — normalized to uppercase on ingestion"),
+    observation_type: zod.enum([
+      "FUNDING_RATE",
+      "OPEN_INTEREST",
+      "LIQUIDATION_CLUSTER",
+      "THESIS_EVENT",
+      "NEWS",
+      "PROTOCOL_EVENT",
+      "PRICE_ACTION",
+      "WALLET_ACTIVITY",
+      "CUSTOM",
+    ]),
+    summary: zod
+      .string()
+      .describe(
+        "Plain observation. What was seen — not what it means. Max 500 chars.",
+      ),
+    evidence: zod
+      .array(
+        zod
+          .object({
+            source: zod
+              .string()
+              .describe(
+                'Human-readable source name (e.g. \"DefiLlama\", \"on-chain tx\")',
+              ),
+            url: zod.string().optional().describe("Optional URL to the source"),
+            excerpt: zod
+              .string()
+              .optional()
+              .describe("Brief excerpt or observation text (max 500 chars)"),
+            timestamp: zod.coerce
+              .date()
+              .optional()
+              .describe(
+                "When this evidence was observed (not when the finding was submitted)",
+              ),
+            reliability: zod
+              .enum(["VERIFIED", "UNVERIFIED", "CONFLICTING", "STALE"])
+              .describe(
+                "VERIFIED = confirmed from authoritative source. UNVERIFIED = not yet confirmed. CONFLICTING = contradicts other evidence. STALE = evidence is older than the expected freshness window.\n",
+              ),
+          })
+          .describe(
+            "A single source-aware evidence item attached to a Hermes finding.",
+          ),
+      )
+      .default(submitHermesFindingBodyEvidenceDefault),
+    confidence: zod
+      .number()
+      .min(submitHermesFindingBodyConfidenceMin)
+      .max(submitHermesFindingBodyConfidenceMax)
+      .describe("Metadata only. Not used for scoring."),
+    suggested_flags: zod
+      .array(zod.string())
+      .default(submitHermesFindingBodySuggestedFlagsDefault)
+      .describe("Hint flags for analyst review. Not verdicts."),
+    expires_at: zod.coerce
+      .date()
+      .optional()
+      .describe("Optional expiry. Finding becomes INACTIVE after this time."),
+  })
+  .describe(
+    "Ingress payload for Hermes evidence submission. All fields are validated and normalized before storage. Confidence and suggested_flags are stored as metadata only and never influence DJZS verdicts.\n",
+  );
+
+/**
+ * @summary Get recent Hermes findings across all assets
+ */
+export const getHermesFindingsQueryLimitDefault = 20;
+
+export const GetHermesFindingsQueryParams = zod.object({
+  limit: zod.coerce.number().default(getHermesFindingsQueryLimitDefault),
+});
+
+export const getHermesFindingsResponseConfidenceMin = 0;
+export const getHermesFindingsResponseConfidenceMax = 1;
+
+export const GetHermesFindingsResponseItem = zod
+  .object({
+    findingId: zod.string(),
+    runId: zod
+      .string()
+      .nullish()
+      .describe("Groups findings from the same agent run"),
+    sourceAgent: zod
+      .string()
+      .describe(
+        "Identifier of the Hermes sub-agent that submitted this finding",
+      ),
+    marketType: zod.enum(["PERP", "SPOT", "CROSS_MARKET", "PROTOCOL"]),
+    target: zod
+      .string()
+      .describe("Asset symbol this finding is about (e.g. ETH, BTC)"),
+    observationType: zod.enum([
+      "FUNDING_RATE",
+      "OPEN_INTEREST",
+      "LIQUIDATION_CLUSTER",
+      "THESIS_EVENT",
+      "NEWS",
+      "PROTOCOL_EVENT",
+      "PRICE_ACTION",
+      "WALLET_ACTIVITY",
+      "CUSTOM",
+    ]),
+    summary: zod
+      .string()
+      .describe("Plain observation text. What was observed — not conclusions."),
+    evidence: zod.array(
+      zod
+        .object({
+          source: zod
+            .string()
+            .describe(
+              'Human-readable source name (e.g. \"DefiLlama\", \"on-chain tx\")',
+            ),
+          url: zod.string().optional().describe("Optional URL to the source"),
+          excerpt: zod
+            .string()
+            .optional()
+            .describe("Brief excerpt or observation text (max 500 chars)"),
+          timestamp: zod.coerce
+            .date()
+            .optional()
+            .describe(
+              "When this evidence was observed (not when the finding was submitted)",
+            ),
+          reliability: zod
+            .enum(["VERIFIED", "UNVERIFIED", "CONFLICTING", "STALE"])
+            .describe(
+              "VERIFIED = confirmed from authoritative source. UNVERIFIED = not yet confirmed. CONFLICTING = contradicts other evidence. STALE = evidence is older than the expected freshness window.\n",
+            ),
+        })
+        .describe(
+          "A single source-aware evidence item attached to a Hermes finding.",
+        ),
+    ),
+    confidence: zod
+      .number()
+      .min(getHermesFindingsResponseConfidenceMin)
+      .max(getHermesFindingsResponseConfidenceMax)
+      .describe(
+        "Metadata only — never used for scoring or verdict computation. Reflects Hermes certainty about the observation, not about trade direction.\n",
+      ),
+    suggestedFlags: zod
+      .array(zod.string())
+      .describe(
+        "Hint flags for analyst review (e.g. CROWDING_RISK, THESIS_RELEVANT). Hints only — not verdicts, not rejection codes. DJZS does not read these.\n",
+      ),
+    status: zod.enum(["ACTIVE", "EXPIRED", "SUPERSEDED"]),
+    expiresAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+  })
+  .describe(
+    "A normalized Hermes agent finding. Hermes observes markets, protocols, wallets, news, funding, open interest, liquidations, and thesis-relevant events. Hermes does NOT approve trades, reject trades, execute trades, produce final scores or verdicts, or override DJZS. Confidence is metadata only. Suggested flags are hints — not decisions. If evidence is weak, incomplete, stale, or conflicting, that is explicitly surfaced.\n",
+  );
+export const GetHermesFindingsResponse = zod.array(
+  GetHermesFindingsResponseItem,
+);
+
+/**
+ * @summary Get active Hermes findings for a specific asset target
+ */
+export const GetHermesFindingsForTargetParams = zod.object({
+  target: zod.coerce.string().describe("Asset symbol (e.g. ETH, BTC, SOL)"),
+});
+
+export const getHermesFindingsForTargetResponseConfidenceMin = 0;
+export const getHermesFindingsForTargetResponseConfidenceMax = 1;
+
+export const GetHermesFindingsForTargetResponseItem = zod
+  .object({
+    findingId: zod.string(),
+    runId: zod
+      .string()
+      .nullish()
+      .describe("Groups findings from the same agent run"),
+    sourceAgent: zod
+      .string()
+      .describe(
+        "Identifier of the Hermes sub-agent that submitted this finding",
+      ),
+    marketType: zod.enum(["PERP", "SPOT", "CROSS_MARKET", "PROTOCOL"]),
+    target: zod
+      .string()
+      .describe("Asset symbol this finding is about (e.g. ETH, BTC)"),
+    observationType: zod.enum([
+      "FUNDING_RATE",
+      "OPEN_INTEREST",
+      "LIQUIDATION_CLUSTER",
+      "THESIS_EVENT",
+      "NEWS",
+      "PROTOCOL_EVENT",
+      "PRICE_ACTION",
+      "WALLET_ACTIVITY",
+      "CUSTOM",
+    ]),
+    summary: zod
+      .string()
+      .describe("Plain observation text. What was observed — not conclusions."),
+    evidence: zod.array(
+      zod
+        .object({
+          source: zod
+            .string()
+            .describe(
+              'Human-readable source name (e.g. \"DefiLlama\", \"on-chain tx\")',
+            ),
+          url: zod.string().optional().describe("Optional URL to the source"),
+          excerpt: zod
+            .string()
+            .optional()
+            .describe("Brief excerpt or observation text (max 500 chars)"),
+          timestamp: zod.coerce
+            .date()
+            .optional()
+            .describe(
+              "When this evidence was observed (not when the finding was submitted)",
+            ),
+          reliability: zod
+            .enum(["VERIFIED", "UNVERIFIED", "CONFLICTING", "STALE"])
+            .describe(
+              "VERIFIED = confirmed from authoritative source. UNVERIFIED = not yet confirmed. CONFLICTING = contradicts other evidence. STALE = evidence is older than the expected freshness window.\n",
+            ),
+        })
+        .describe(
+          "A single source-aware evidence item attached to a Hermes finding.",
+        ),
+    ),
+    confidence: zod
+      .number()
+      .min(getHermesFindingsForTargetResponseConfidenceMin)
+      .max(getHermesFindingsForTargetResponseConfidenceMax)
+      .describe(
+        "Metadata only — never used for scoring or verdict computation. Reflects Hermes certainty about the observation, not about trade direction.\n",
+      ),
+    suggestedFlags: zod
+      .array(zod.string())
+      .describe(
+        "Hint flags for analyst review (e.g. CROWDING_RISK, THESIS_RELEVANT). Hints only — not verdicts, not rejection codes. DJZS does not read these.\n",
+      ),
+    status: zod.enum(["ACTIVE", "EXPIRED", "SUPERSEDED"]),
+    expiresAt: zod.coerce.date().nullish(),
+    createdAt: zod.coerce.date(),
+  })
+  .describe(
+    "A normalized Hermes agent finding. Hermes observes markets, protocols, wallets, news, funding, open interest, liquidations, and thesis-relevant events. Hermes does NOT approve trades, reject trades, execute trades, produce final scores or verdicts, or override DJZS. Confidence is metadata only. Suggested flags are hints — not decisions. If evidence is weak, incomplete, stale, or conflicting, that is explicitly surfaced.\n",
+  );
+export const GetHermesFindingsForTargetResponse = zod.array(
+  GetHermesFindingsForTargetResponseItem,
+);
 
 /**
  * @summary Get Pyth Network live price and confidence for all tracked assets

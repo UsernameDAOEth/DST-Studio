@@ -11,8 +11,9 @@ import {
   getGetHermesJobsQueryKey,
   HermesConstraintsUpdateActiveTimeframe,
   HermesConstraintsUpdateBrowserbaseTriggerPolicy,
-  HermesConstraintsUpdateWaitBiasPolicy
+  HermesConstraintsUpdateWaitBiasPolicy,
 } from "@workspace/api-client-react";
+import { HermesBoundaryPanel, HermesFindingsPanel } from "@/components/hermes-findings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProcessVerdictBadge } from "@/components/signal-process";
@@ -476,7 +477,21 @@ export default function Hermes() {
           </div>
         </div>
       </div>
-      
+
+      {/* SECTION 4: FINDINGS INGRESS */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-display font-bold text-foreground">FINDINGS INGRESS</h2>
+            <p className="text-muted-foreground font-mono text-xs uppercase mt-1">
+              EVIDENCE SUBMITTED BY HERMES AGENTS — READ-ONLY CONTEXT
+            </p>
+          </div>
+        </div>
+        <HermesBoundaryPanel />
+        <HermesFindingsPanel />
+      </div>
+
     </div>
   );
 }

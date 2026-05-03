@@ -18,11 +18,13 @@ import type {
 
 import type {
   AgentChatRequest,
+  AgentFinding,
   AgentReply,
   Alert,
   AuditReport,
   CreateAlert,
   CreateWatchlistEntry,
+  GetHermesFindingsParams,
   GetHermesJobsParams,
   GetHermesMetricsParams,
   GetSignalFeedParams,
@@ -41,6 +43,9 @@ import type {
   Signal,
   SignalDetail,
   SignalFeedEntry,
+  SubmitFindingAccepted,
+  SubmitFindingRequest,
+  SubmitHermesFinding400,
   WatchlistEntry,
 } from "./api.schemas";
 
@@ -2043,6 +2048,284 @@ export function useGetHermesJobs<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetHermesJobsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Protected ingress endpoint for Hermes agent findings. Hermes submits structured observations only — confidence is metadata, suggested flags are hints, not verdicts. DJZS remains the sole deterministic audit gate. Findings are stored and optionally attached to trade packets as read-only context. Hermes never approves, rejects, scores, or overrides DJZS.
+
+ * @summary Submit a structured Hermes monitoring finding (evidence ingress)
+ */
+export const getSubmitHermesFindingUrl = () => {
+  return `/api/hermes/findings`;
+};
+
+export const submitHermesFinding = async (
+  submitFindingRequest: SubmitFindingRequest,
+  options?: RequestInit,
+): Promise<SubmitFindingAccepted> => {
+  return customFetch<SubmitFindingAccepted>(getSubmitHermesFindingUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(submitFindingRequest),
+  });
+};
+
+export const getSubmitHermesFindingMutationOptions = <
+  TError = ErrorType<SubmitHermesFinding400>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitHermesFinding>>,
+    TError,
+    { data: BodyType<SubmitFindingRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitHermesFinding>>,
+  TError,
+  { data: BodyType<SubmitFindingRequest> },
+  TContext
+> => {
+  const mutationKey = ["submitHermesFinding"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitHermesFinding>>,
+    { data: BodyType<SubmitFindingRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitHermesFinding(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitHermesFindingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitHermesFinding>>
+>;
+export type SubmitHermesFindingMutationBody = BodyType<SubmitFindingRequest>;
+export type SubmitHermesFindingMutationError =
+  ErrorType<SubmitHermesFinding400>;
+
+/**
+ * @summary Submit a structured Hermes monitoring finding (evidence ingress)
+ */
+export const useSubmitHermesFinding = <
+  TError = ErrorType<SubmitHermesFinding400>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitHermesFinding>>,
+    TError,
+    { data: BodyType<SubmitFindingRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitHermesFinding>>,
+  TError,
+  { data: BodyType<SubmitFindingRequest> },
+  TContext
+> => {
+  return useMutation(getSubmitHermesFindingMutationOptions(options));
+};
+
+/**
+ * @summary Get recent Hermes findings across all assets
+ */
+export const getGetHermesFindingsUrl = (params?: GetHermesFindingsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/hermes/findings?${stringifiedParams}`
+    : `/api/hermes/findings`;
+};
+
+export const getHermesFindings = async (
+  params?: GetHermesFindingsParams,
+  options?: RequestInit,
+): Promise<AgentFinding[]> => {
+  return customFetch<AgentFinding[]>(getGetHermesFindingsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHermesFindingsQueryKey = (
+  params?: GetHermesFindingsParams,
+) => {
+  return [`/api/hermes/findings`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetHermesFindingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHermesFindings>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetHermesFindingsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesFindings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetHermesFindingsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHermesFindings>>
+  > = ({ signal }) => getHermesFindings(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesFindings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHermesFindingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHermesFindings>>
+>;
+export type GetHermesFindingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recent Hermes findings across all assets
+ */
+
+export function useGetHermesFindings<
+  TData = Awaited<ReturnType<typeof getHermesFindings>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetHermesFindingsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesFindings>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHermesFindingsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get active Hermes findings for a specific asset target
+ */
+export const getGetHermesFindingsForTargetUrl = (target: string) => {
+  return `/api/hermes/findings/${target}`;
+};
+
+export const getHermesFindingsForTarget = async (
+  target: string,
+  options?: RequestInit,
+): Promise<AgentFinding[]> => {
+  return customFetch<AgentFinding[]>(getGetHermesFindingsForTargetUrl(target), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHermesFindingsForTargetQueryKey = (target: string) => {
+  return [`/api/hermes/findings/${target}`] as const;
+};
+
+export const getGetHermesFindingsForTargetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHermesFindingsForTarget>>,
+  TError = ErrorType<unknown>,
+>(
+  target: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesFindingsForTarget>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetHermesFindingsForTargetQueryKey(target);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHermesFindingsForTarget>>
+  > = ({ signal }) =>
+    getHermesFindingsForTarget(target, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!target,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesFindingsForTarget>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHermesFindingsForTargetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHermesFindingsForTarget>>
+>;
+export type GetHermesFindingsForTargetQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get active Hermes findings for a specific asset target
+ */
+
+export function useGetHermesFindingsForTarget<
+  TData = Awaited<ReturnType<typeof getHermesFindingsForTarget>>,
+  TError = ErrorType<unknown>,
+>(
+  target: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesFindingsForTarget>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHermesFindingsForTargetQueryOptions(
+    target,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

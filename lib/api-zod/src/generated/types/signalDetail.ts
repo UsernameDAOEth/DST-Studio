@@ -7,6 +7,7 @@
  */
 import type { AuditReport } from "./auditReport";
 import type { DataQualityReport } from "./dataQualityReport";
+import type { HermesFindingsContext } from "./hermesFindingsContext";
 import type { MarketSnapshot } from "./marketSnapshot";
 import type { OIContext } from "./oIContext";
 import type { OutcomeTracking } from "./outcomeTracking";
@@ -24,4 +25,7 @@ export type SignalDetail = Signal & {
   /** Data provenance and quality report for this signal. Surfaces source hierarchy, freshness, quality flags, and the Pyth secondary verifier result. Degrade or WAIT signals appear here when data quality falls below threshold.
    */
   dataQuality?: DataQualityReport;
+  /** Active Hermes monitoring findings adapted as read-only audit context for this trade packet. Confidence and suggested flags from findings are metadata only — they never influence the DJZS verdict. Null when no active findings exist for this asset.
+   */
+  hermesContext?: HermesFindingsContext;
 };

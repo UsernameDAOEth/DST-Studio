@@ -47,12 +47,25 @@ DST is an **audit-first signal system** — a deterministic pre-trade audit laye
 - **Agent Interpreter** (`artifacts/api-server/src/lib/dst/agentInterpreter.ts`): Chat command processing
 - **Database**: PostgreSQL — signals, watchlist, alerts tables. signals table now has `data_quality` jsonb column (Phase 5).
 
-### Hermes Module — Phase 3
+### Hermes Module — Phase 3 (complete)
 - `constraints.ts` — system constraints (timeframe, R/R threshold, Pyth filter, alert routing, wait bias policy). Persisted to `/tmp/hermes-constraints.json`
 - `scan.ts` — scan trigger, job tracking, in-memory stats (totalScansToday, totalApprovedToday, totalWaitToday)
 - `metrics.ts` — DB-backed metrics computation (24H/7D/30D): wait rate, approval rate, rejection code breakdown, setup family breakdown
 - `evaluation.ts` — weekly policy evaluation report with per-parameter recommendations (KEEP/TIGHTEN/LOOSEN/REVIEW)
+- `findings.ts` — evidence ingress: SubmitFindingSchema (Zod), ingestFinding(), getFindingsForTarget(), getRecentFindings(), adaptFindingsToAuditContext(), BOUNDARY_REMINDER constant
 - `types.ts` — local type definitions (HermesConstraints, HermesJob, HermesMetrics, HermesEvaluation, PythPriceData, EvalReviewItem)
+
+### Hermes Findings Ingress — Phase 3 Architecture
+Boundary doctrine is enforced at every layer:
+- **POST /api/hermes/findings** — protected ingress. Accepts SubmitFindingRequest, validates via Zod, persists to `hermes_findings` DB table, returns `SubmitFindingAccepted` with BOUNDARY_REMINDER in every response.
+- **GET /api/hermes/findings** — recent findings log (up to 100)
+- **GET /api/hermes/findings/:target** — active findings for an asset (used in signal-detail hermesContext section)
+- **`hermes_findings` DB table** — findingId, runId, sourceAgent, marketType, target, observationType, summary, evidence (jsonb), confidence (numeric metadata, never used for scoring), suggestedFlags, status (ACTIVE/EXPIRED/DISMISSED), expiresAt
+- **BOUNDARY_REMINDER** (constant): "HERMES SUBMITS FINDINGS ONLY. Confidence is metadata — not a score. Suggested flags are hints — not verdicts. DJZS is the deterministic audit gate. Capital movement requires the user's decision."
+
+### Codegen Pipeline
+- `lib/api-spec/fix-api-zod-index.mjs` — post-codegen fixup that strips a phantom `api.schemas` export from Orval v8 generated `lib/api-zod/src/index.ts`
+- Codegen command: `pnpm --filter @workspace/api-spec run codegen`
 
 ### Signal Engine — Phase 2 Logic
 - Fetches real-time prices from DefiLlama Coins API
@@ -92,8 +105,11 @@ DST is an **audit-first signal system** — a deterministic pre-trade audit laye
 - `GET /api/hermes/jobs` — recent job list with phase-by-phase status
 - `GET /api/hermes/metrics?period=24H|7D|30D` — DB-backed scan metrics
 - `GET /api/hermes/evaluation` — weekly policy evaluation report
+- `POST /api/hermes/findings` — protected evidence ingress (Zod-validated, persisted to DB, returns BOUNDARY_REMINDER)
+- `GET /api/hermes/findings?limit=N` — recent findings log
+- `GET /api/hermes/findings/:target` — active findings for a specific asset
 - `GET /api/pyth/prices` — live BTC/ETH/SOL prices from Pyth Hermes REST API
-- `GET /api/pyth/price/:asset` — single asset price
+- `GET /api/pyth/prices/:asset` — single asset Pyth price + confidence
 
 ### DB Schema — Phase 2
 `signals` table includes: direction, confidence, verdictDjzs, processVerdict, logicAdmissibility, setupFamily, entryQuality, narrativeRisk, rrRatio, thesis, whyTrade, rejectIf, rejectionCodes, processQualityGrade, preTradChecklist (jsonb), outcomeTracking (jsonb), marketSnapshot (jsonb), trendRegime (jsonb), openInterestContext (jsonb), auditReport (jsonb)
@@ -115,8 +131,9 @@ DST is an **audit-first signal system** — a deterministic pre-trade audit laye
 - `/alerts` — alert configuration
 - `/agent` — chat agent
 - `/integrations` — integration scaffold + live Pyth price confidence display
-- `/hermes` — Hermes operations console (pipeline stages, system constraints editor, subagent roles, job log)
+- `/hermes` — Hermes operations console (pipeline stages, system constraints editor, subagent roles, job log, findings ingress section with boundary panel + live findings log)
 - `/evaluation` — stage metrics (24H/7D/30D) + weekly policy evaluation with per-parameter recommendations
+- `/signal/:asset` (signal-detail) — includes HermesTargetFindingsPanel after DataQualityPanel: renders active findings for the asset if any exist, each with boundary panel, evidence reliability indicators, and confidence as metadata label
 - `/stack` — Product positioning: DST vs charting vs execution, "NOT BUILT FOR" section, DST advantage (pre-trade discipline, evidence integration, deterministic audit), full architecture roadmap with phased integration stack, 5-step workflow diagram, operating doctrine
 
 ### Extending

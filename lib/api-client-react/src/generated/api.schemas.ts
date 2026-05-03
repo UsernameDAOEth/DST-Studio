@@ -451,6 +451,116 @@ export interface DataQualityReport {
   computedAt: string;
 }
 
+export type AgentFindingMarketType =
+  (typeof AgentFindingMarketType)[keyof typeof AgentFindingMarketType];
+
+export const AgentFindingMarketType = {
+  PERP: "PERP",
+  SPOT: "SPOT",
+  CROSS_MARKET: "CROSS_MARKET",
+  PROTOCOL: "PROTOCOL",
+} as const;
+
+export type AgentFindingObservationType =
+  (typeof AgentFindingObservationType)[keyof typeof AgentFindingObservationType];
+
+export const AgentFindingObservationType = {
+  FUNDING_RATE: "FUNDING_RATE",
+  OPEN_INTEREST: "OPEN_INTEREST",
+  LIQUIDATION_CLUSTER: "LIQUIDATION_CLUSTER",
+  THESIS_EVENT: "THESIS_EVENT",
+  NEWS: "NEWS",
+  PROTOCOL_EVENT: "PROTOCOL_EVENT",
+  PRICE_ACTION: "PRICE_ACTION",
+  WALLET_ACTIVITY: "WALLET_ACTIVITY",
+  CUSTOM: "CUSTOM",
+} as const;
+
+/**
+ * VERIFIED = confirmed from authoritative source. UNVERIFIED = not yet confirmed. CONFLICTING = contradicts other evidence. STALE = evidence is older than the expected freshness window.
+
+ */
+export type AgentFindingEvidenceReliability =
+  (typeof AgentFindingEvidenceReliability)[keyof typeof AgentFindingEvidenceReliability];
+
+export const AgentFindingEvidenceReliability = {
+  VERIFIED: "VERIFIED",
+  UNVERIFIED: "UNVERIFIED",
+  CONFLICTING: "CONFLICTING",
+  STALE: "STALE",
+} as const;
+
+/**
+ * A single source-aware evidence item attached to a Hermes finding.
+ */
+export interface AgentFindingEvidence {
+  /** Human-readable source name (e.g. "DefiLlama", "on-chain tx") */
+  source: string;
+  /** Optional URL to the source */
+  url?: string;
+  /** Brief excerpt or observation text (max 500 chars) */
+  excerpt?: string;
+  /** When this evidence was observed (not when the finding was submitted) */
+  timestamp?: string;
+  /** VERIFIED = confirmed from authoritative source. UNVERIFIED = not yet confirmed. CONFLICTING = contradicts other evidence. STALE = evidence is older than the expected freshness window.
+   */
+  reliability: AgentFindingEvidenceReliability;
+}
+
+export type AgentFindingStatus =
+  (typeof AgentFindingStatus)[keyof typeof AgentFindingStatus];
+
+export const AgentFindingStatus = {
+  ACTIVE: "ACTIVE",
+  EXPIRED: "EXPIRED",
+  SUPERSEDED: "SUPERSEDED",
+} as const;
+
+/**
+ * A normalized Hermes agent finding. Hermes observes markets, protocols, wallets, news, funding, open interest, liquidations, and thesis-relevant events. Hermes does NOT approve trades, reject trades, execute trades, produce final scores or verdicts, or override DJZS. Confidence is metadata only. Suggested flags are hints — not decisions. If evidence is weak, incomplete, stale, or conflicting, that is explicitly surfaced.
+
+ */
+export interface AgentFinding {
+  findingId: string;
+  /** Groups findings from the same agent run */
+  runId?: string | null;
+  /** Identifier of the Hermes sub-agent that submitted this finding */
+  sourceAgent: string;
+  marketType: AgentFindingMarketType;
+  /** Asset symbol this finding is about (e.g. ETH, BTC) */
+  target: string;
+  observationType: AgentFindingObservationType;
+  /** Plain observation text. What was observed — not conclusions. */
+  summary: string;
+  evidence: AgentFindingEvidence[];
+  /**
+   * Metadata only — never used for scoring or verdict computation. Reflects Hermes certainty about the observation, not about trade direction.
+
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+  /** Hint flags for analyst review (e.g. CROWDING_RISK, THESIS_RELEVANT). Hints only — not verdicts, not rejection codes. DJZS does not read these.
+   */
+  suggestedFlags: string[];
+  status: AgentFindingStatus;
+  expiresAt?: string | null;
+  createdAt: string;
+}
+
+/**
+ * Hermes monitoring findings adapted as read-only audit context for a trade packet. Confidence values and suggested flags are surfaced as metadata only. DJZS verdict computation is not influenced by Hermes context in any way. This section surfaces what Hermes observed — not to score or override the audit result.
+
+ */
+export interface HermesFindingsContext {
+  findingCount: number;
+  activeFindings: AgentFinding[];
+  /** Deduplicated hint flags from all active findings. For analyst review only. */
+  suggestedFlagHints: string[];
+  boundaryReminder: string;
+  attachedAt: string;
+}
+
 export type SignalDetail = Signal & {
   marketSnapshot?: MarketSnapshot;
   trendRegime?: TrendRegime;
@@ -461,6 +571,9 @@ export type SignalDetail = Signal & {
   /** Data provenance and quality report for this signal. Surfaces source hierarchy, freshness, quality flags, and the Pyth secondary verifier result. Degrade or WAIT signals appear here when data quality falls below threshold.
    */
   dataQuality?: DataQualityReport;
+  /** Active Hermes monitoring findings adapted as read-only audit context for this trade packet. Confidence and suggested flags from findings are metadata only — they never influence the DJZS verdict. Null when no active findings exist for this asset.
+   */
+  hermesContext?: HermesFindingsContext;
 };
 
 export interface WatchlistEntry {
@@ -974,6 +1087,74 @@ export interface PythPriceData {
   influencesProcessVerdict: boolean;
 }
 
+export type SubmitFindingRequestMarketType =
+  (typeof SubmitFindingRequestMarketType)[keyof typeof SubmitFindingRequestMarketType];
+
+export const SubmitFindingRequestMarketType = {
+  PERP: "PERP",
+  SPOT: "SPOT",
+  CROSS_MARKET: "CROSS_MARKET",
+  PROTOCOL: "PROTOCOL",
+} as const;
+
+export type SubmitFindingRequestObservationType =
+  (typeof SubmitFindingRequestObservationType)[keyof typeof SubmitFindingRequestObservationType];
+
+export const SubmitFindingRequestObservationType = {
+  FUNDING_RATE: "FUNDING_RATE",
+  OPEN_INTEREST: "OPEN_INTEREST",
+  LIQUIDATION_CLUSTER: "LIQUIDATION_CLUSTER",
+  THESIS_EVENT: "THESIS_EVENT",
+  NEWS: "NEWS",
+  PROTOCOL_EVENT: "PROTOCOL_EVENT",
+  PRICE_ACTION: "PRICE_ACTION",
+  WALLET_ACTIVITY: "WALLET_ACTIVITY",
+  CUSTOM: "CUSTOM",
+} as const;
+
+/**
+ * Ingress payload for Hermes evidence submission. All fields are validated and normalized before storage. Confidence and suggested_flags are stored as metadata only and never influence DJZS verdicts.
+
+ */
+export interface SubmitFindingRequest {
+  /** Optional client-supplied ID. A UUID is generated if omitted. */
+  finding_id?: string;
+  /** Optional run identifier to group findings from the same agent session */
+  run_id?: string;
+  /** Identifier of the Hermes sub-agent submitting this finding */
+  source_agent: string;
+  market_type?: SubmitFindingRequestMarketType;
+  /** Asset symbol — normalized to uppercase on ingestion */
+  target: string;
+  observation_type: SubmitFindingRequestObservationType;
+  /** Plain observation. What was seen — not what it means. Max 500 chars. */
+  summary: string;
+  evidence?: AgentFindingEvidence[];
+  /**
+   * Metadata only. Not used for scoring.
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+  /** Hint flags for analyst review. Not verdicts. */
+  suggested_flags?: string[];
+  /** Optional expiry. Finding becomes INACTIVE after this time. */
+  expires_at?: string;
+}
+
+/**
+ * Response confirming a Hermes finding was accepted and stored.
+ */
+export interface SubmitFindingAccepted {
+  accepted: boolean;
+  findingId: string;
+  target: string;
+  /** Always included in the response to reinforce the Hermes boundary. Hermes submits findings only. Confidence is metadata. DJZS is the audit gate.
+   */
+  boundaryReminder: string;
+  createdAt: string;
+}
+
 export type GetSignalsParams = {
   /**
    * Filter by asset symbol (e.g. ETH, BTC, SOL)
@@ -1009,5 +1190,16 @@ export const GetHermesMetricsPeriod = {
 } as const;
 
 export type GetHermesJobsParams = {
+  limit?: number;
+};
+
+export type SubmitHermesFinding400Details = { [key: string]: unknown };
+
+export type SubmitHermesFinding400 = {
+  error: string;
+  details?: SubmitHermesFinding400Details;
+};
+
+export type GetHermesFindingsParams = {
   limit?: number;
 };
