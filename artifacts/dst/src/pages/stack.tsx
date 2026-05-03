@@ -290,6 +290,131 @@ export default function Stack() {
         </div>
       </div>
 
+      {/* ── HERMES MODULE PLAN ── */}
+      <div>
+        <SectionHeader sub="hermes as the runtime layer around dst and djzs">
+          HERMES MODULE PLAN
+        </SectionHeader>
+
+        <div className="space-y-4">
+          {/* Intro */}
+          <p className="font-mono text-[10px] text-muted-foreground max-w-2xl leading-relaxed">
+            Hermes is the always-on operator shell around DST and DJZS. It does not produce signals. It does not issue verdicts. It schedules scans, manages constraints, ingests evidence, hands off to the DJZS audit gate, and routes approved packets. The authority boundary is absolute and by design.
+          </p>
+
+          {/* CORE RUNTIME */}
+          <div className="terminal-panel border-primary/20 p-5 space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">CORE RUNTIME</div>
+                <div className="font-mono text-[10px] text-muted-foreground/60 mt-0.5 uppercase">Required — must be operational</div>
+              </div>
+              <span className="chip-pass">LIVE</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                { cap: "SCAN SCHEDULING", note: "Manages the scan loop. Manual trigger in Phase 3. Autonomous scheduler is scaffolded." },
+                { cap: "EVIDENCE INGRESS", note: "POST /hermes/findings accepts structured findings from any agent. Idempotent by findingId." },
+                { cap: "AUDIT HANDOFF", note: "Each scan job submits to DJZS as a discrete phase. Hermes does not influence the verdict." },
+                { cap: "ALERT ROUTING", note: "Routes APPROVED packets to configured delivery channels after the DJZS gate fires." },
+                { cap: "WEBHOOK SUBSCRIPTIONS", note: "Inbound push endpoints for price alerts and flow signals. Scaffolded — Phase 4." },
+                { cap: "RUNTIME MANAGEMENT", note: "Constraints are persisted and enforced on every scan. Controls all durable Hermes behavior." },
+              ].map((c) => (
+                <div key={c.cap} className="flex items-start gap-2">
+                  <Check className="w-3 h-3 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-mono text-[10px] font-bold text-foreground uppercase">{c.cap}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground leading-relaxed mt-0.5">{c.note}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* REQUIRED SKILLS + OPTIONAL SKILLS side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* REQUIRED SKILLS */}
+            <div className="terminal-panel p-5 space-y-3">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">REQUIRED SKILLS</div>
+                  <div className="font-mono text-[10px] text-muted-foreground/60 mt-0.5 uppercase">Active or scaffolded in Phase 3</div>
+                </div>
+                <span className="chip-warn">PHASE 3</span>
+              </div>
+              {[
+                { name: "DEFILAMMA DATA READER", status: "ACTIVE", note: "Market data, regime, indicators — primary data layer" },
+                { name: "DJZS AUDIT INTERFACE", status: "ACTIVE", note: "Submits DST proposals to the audit gate, reads verdict" },
+                { name: "PYTH CONFIDENCE READER", status: "OPTIONAL", note: "Live price confidence overlay — no key required" },
+                { name: "CONSTRAINTS ENFORCER", status: "ACTIVE", note: "Applies minRR, timeframe, waitBias on every scan" },
+                { name: "JOB TRACKER", status: "ACTIVE", note: "Tracks phases (DEFILAMMA → PYTH → DJZS → ROUTING) per job" },
+                { name: "FINDING INGESTER", status: "ACTIVE", note: "Accepts structured evidence from external agents" },
+              ].map((s) => (
+                <div key={s.name} className="flex items-start gap-2">
+                  <div className={cn(
+                    "w-1.5 h-1.5 rounded-full shrink-0 mt-1.5",
+                    s.status === "ACTIVE" ? "bg-primary" : "bg-[hsl(var(--trade-wait))]"
+                  )} />
+                  <div>
+                    <div className="font-mono text-[10px] font-bold text-foreground uppercase">{s.name}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground">{s.note}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* OPTIONAL SKILLS */}
+            <div className="terminal-panel p-5 space-y-3 opacity-80">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">OPTIONAL SKILLS</div>
+                  <div className="font-mono text-[10px] text-muted-foreground/60 mt-0.5 uppercase">Off by default — Phase 4+</div>
+                </div>
+                <span className="chip-neutral">PHASE 4+</span>
+              </div>
+              {[
+                { name: "BROWSER RESEARCH", note: "Triggered narrative check via Browserbase — APPROVED_ONLY policy" },
+                { name: "TELEGRAM ROUTING", note: "Alert delivery — requires TELEGRAM_BOT_TOKEN" },
+                { name: "XMTP ROUTING", note: "Wallet-to-wallet delivery — requires XMTP_PRIVATE_KEY" },
+                { name: "DISCORD ROUTING", note: "Channel delivery — requires DISCORD_WEBHOOK_URL" },
+                { name: "CODEBASE INSPECTION", note: "MCP extension — read DST/DJZS rules for constraint diagnostics" },
+                { name: "CODING HELPERS", note: "MCP extension — propose constraint changes as human-reviewed diffs" },
+              ].map((s) => (
+                <div key={s.name} className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 border border-muted-foreground/30 shrink-0 mt-1.5" />
+                  <div>
+                    <div className="font-mono text-[10px] font-bold text-muted-foreground uppercase">{s.name}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground/70">{s.note}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* MCP + PORTAL row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="terminal-panel p-5 opacity-70">
+              <div className="flex items-start justify-between mb-3">
+                <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">MCP — CONTROLLED EXTENSION LAYER</div>
+                <span className="chip-neutral text-[9px]">PHASE 5</span>
+              </div>
+              <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                MCP tools are a later controlled extension. In Phase 3, MCP is not active and not required. When activated in Phase 5, MCP tools will run under strict human-approval gating — no autonomous write actions. Planned tools: codebase reader (read-only), diff proposer (approval required), web researcher (APPROVED_ONLY policy).
+              </p>
+            </div>
+            <div className="terminal-panel p-5 opacity-70">
+              <div className="flex items-start justify-between mb-3">
+                <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">NOUS PORTAL — OPTIONAL PROVIDER</div>
+                <span className="chip-neutral text-[9px]">OPTIONAL</span>
+              </div>
+              <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
+                Nous Portal is an optional LLM provider backend for any agent-assisted Hermes capabilities (research summarization, finding interpretation). It is not a runtime dependency. DST, DJZS, and all core Hermes functions operate without it. Can be swapped for any compatible inference endpoint. No Nous dependency is baked into Phase 3 architecture.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── WORKFLOW ── */}
       <div>
         <SectionHeader sub="recommended usage pattern">

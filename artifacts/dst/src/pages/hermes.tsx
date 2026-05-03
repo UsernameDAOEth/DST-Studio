@@ -98,6 +98,48 @@ export default function Hermes() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
+
+      {/* AUTHORITY BOUNDARY MODEL */}
+      <div className="bg-card border border-primary/30 p-6">
+        <div className="mb-5">
+          <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-1">HERMES — AUTHORITY BOUNDARY</h2>
+          <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest">
+            Runtime operator shell. Watches and routes. Never scores. Never audits.
+          </p>
+        </div>
+        <div className="flex flex-col md:flex-row items-stretch gap-0">
+          {/* DST */}
+          <div className="flex-1 border border-border bg-background p-4 flex flex-col gap-2">
+            <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">DST</div>
+            <div className="font-mono text-[10px] text-primary uppercase tracking-widest">PROPOSES</div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed mt-1">
+              Signal engine. Reads market data, computes technical state, produces a candidate setup with entry zone, target, invalidation, and R/R. Never executes.
+            </p>
+          </div>
+          <div className="hidden md:flex items-center px-3 text-muted-foreground/30 font-mono text-lg">→</div>
+          {/* DJZS */}
+          <div className="flex-1 border border-primary/50 bg-primary/5 p-4 flex flex-col gap-2">
+            <div className="font-mono text-xs font-bold text-primary uppercase tracking-wider">DJZS</div>
+            <div className="font-mono text-[10px] text-primary uppercase tracking-widest">AUDITS — FINAL</div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed mt-1">
+              Deterministic audit gate. Accepts or rejects the DST proposal against hard structural rules. Verdict is not overrideable. Produces rejection codes, not recommendations.
+            </p>
+          </div>
+          <div className="hidden md:flex items-center px-3 text-muted-foreground/30 font-mono text-lg">→</div>
+          {/* HERMES */}
+          <div className="flex-1 border border-border bg-background p-4 flex flex-col gap-2">
+            <div className="font-mono text-xs font-bold text-foreground uppercase tracking-wider">HERMES</div>
+            <div className="font-mono text-[10px] text-[hsl(var(--trade-wait))] uppercase tracking-widest">ROUTES — NEVER SCORES</div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed mt-1">
+              Orchestration runtime. Schedules scans, enforces constraints, ingests evidence, hands off to DJZS, and routes approved packets. Has no scoring authority.
+            </p>
+          </div>
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground/50 mt-4 italic border-t border-border pt-4">
+          This boundary is absolute. Hermes constraint changes affect scan behavior. They do not influence DJZS verdict logic or signal engine doctrine.
+        </p>
+      </div>
+
       {/* SECTION 1: STATUS BAR */}
       <div className="bg-card border border-border p-6 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
@@ -180,6 +222,109 @@ export default function Hermes() {
           <p className="text-muted-foreground italic text-xs mt-4">
             By doctrine: most scans end in WAIT. DJZS audit is the final gate. Hermes routes — never scores.
           </p>
+        </div>
+      </div>
+
+      {/* REQUIRED CAPABILITIES REGISTRY */}
+      <div className="bg-card border border-border p-6">
+        <div className="mb-5 flex items-start justify-between">
+          <div>
+            <h2 className="text-sm font-mono font-bold text-foreground uppercase tracking-widest">REQUIRED CAPABILITIES</h2>
+            <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-1">
+              Core runtime functions — all must be operational for Hermes to run correctly
+            </p>
+          </div>
+          <span className="chip-pass text-[10px]">PHASE 3 CORE</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border">
+          {/* SCAN SCHEDULING */}
+          <div className="bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-start justify-between">
+              <div className="font-mono text-xs font-bold text-foreground uppercase">SCAN SCHEDULING</div>
+              <span className="chip-warn text-[9px]">MANUAL</span>
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              Manages the scan loop. Current phase: manual trigger only. Autonomous scheduler is scaffolded — activate when continuous operation is required.
+            </p>
+            <div className="mt-auto pt-2 border-t border-border font-mono text-[9px] text-muted-foreground/50">
+              INTERVAL: {status?.scanIntervalMinutes ?? 15}m — LAST RUN: {status?.lastRunAt ? new Date(status.lastRunAt).toLocaleTimeString() : "NONE"}
+            </div>
+          </div>
+
+          {/* EVIDENCE INGRESS */}
+          <div className="bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-start justify-between">
+              <div className="font-mono text-xs font-bold text-foreground uppercase">EVIDENCE INGRESS</div>
+              <span className="chip-pass text-[9px]">ACTIVE</span>
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              Structured finding ingestion via POST /hermes/findings. Idempotent by findingId. All findings are read-only context — they do not modify DJZS verdicts.
+            </p>
+            <div className="mt-auto pt-2 border-t border-border font-mono text-[9px] text-muted-foreground/50">
+              ENDPOINT: /api/hermes/findings — IDEMPOTENT: YES
+            </div>
+          </div>
+
+          {/* AUDIT HANDOFF */}
+          <div className="bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-start justify-between">
+              <div className="font-mono text-xs font-bold text-foreground uppercase">AUDIT HANDOFF</div>
+              <span className="chip-pass text-[9px]">ACTIVE</span>
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              Each scan job runs the DJZS audit as the DJZS_AUDIT phase. Hermes submits to the audit gate — it does not influence the verdict or inject evidence into the audit.
+            </p>
+            <div className="mt-auto pt-2 border-t border-border font-mono text-[9px] text-muted-foreground/50">
+              AUDIT PHASE: DJZS_AUDIT — AUTHORITY: DJZS ONLY
+            </div>
+          </div>
+
+          {/* ALERT ROUTING */}
+          <div className="bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-start justify-between">
+              <div className="font-mono text-xs font-bold text-foreground uppercase">ALERT ROUTING</div>
+              <span className={cn(
+                "text-[9px]",
+                (constraints?.alertRouting?.telegram || constraints?.alertRouting?.discord || constraints?.alertRouting?.xmtp) ? "chip-warn" : "chip-neutral"
+              )}>
+                {(constraints?.alertRouting?.telegram || constraints?.alertRouting?.discord || constraints?.alertRouting?.xmtp) ? "PARTIAL" : "NONE CONFIGURED"}
+              </span>
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              Routes APPROVED audit packets to configured delivery channels after DJZS approval. Routing fires last — after the audit. Hermes never routes unaudited signals.
+            </p>
+            <div className="mt-auto pt-2 border-t border-border font-mono text-[9px] text-muted-foreground/50">
+              TG: {constraints?.alertRouting?.telegram ? "ON" : "OFF"} — XMTP: {constraints?.alertRouting?.xmtp ? "ON" : "OFF"} — DC: {constraints?.alertRouting?.discord ? "ON" : "OFF"}
+            </div>
+          </div>
+
+          {/* WEBHOOK SUBSCRIPTIONS */}
+          <div className="bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-start justify-between">
+              <div className="font-mono text-xs font-bold text-foreground uppercase">WEBHOOK SUBSCRIPTIONS</div>
+              <span className="chip-neutral text-[9px]">SCAFFOLDED</span>
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              Inbound webhook endpoints for external data push. Currently scaffolded — will accept price alerts, CEX flow signals, and liquidation events as evidence ingress inputs.
+            </p>
+            <div className="mt-auto pt-2 border-t border-border font-mono text-[9px] text-muted-foreground/50">
+              STATUS: NOT YET WIRED — PLANNED PHASE 4
+            </div>
+          </div>
+
+          {/* RUNTIME MANAGEMENT */}
+          <div className="bg-card p-4 flex flex-col gap-2">
+            <div className="flex items-start justify-between">
+              <div className="font-mono text-xs font-bold text-foreground uppercase">RUNTIME MANAGEMENT</div>
+              <span className="chip-pass text-[9px]">ACTIVE</span>
+            </div>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              System constraints are persisted across restarts. Scan counters, job history, and status are maintained in-process. Constraints control all durable Hermes behavior.
+            </p>
+            <div className="mt-auto pt-2 border-t border-border font-mono text-[9px] text-muted-foreground/50">
+              CONSTRAINTS PERSIST: /tmp/hermes-constraints.json
+            </div>
+          </div>
         </div>
       </div>
 
@@ -475,6 +620,160 @@ export default function Hermes() {
               <span className="chip-warn text-lg px-3 py-1">STANDBY</span>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* OPTIONAL SKILLS */}
+      <div className="bg-card border border-border p-6">
+        <div className="mb-5 flex items-start justify-between">
+          <div>
+            <h2 className="text-sm font-mono font-bold text-foreground uppercase tracking-widest">OPTIONAL SKILLS</h2>
+            <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-1">
+              Secondary capabilities — off by default, enabled via constraints or credentials
+            </p>
+          </div>
+          <span className="chip-neutral text-[10px]">PHASE 4+</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border">
+          {[
+            {
+              name: "BROWSER RESEARCH",
+              provider: "BROWSERBASE",
+              status: constraints?.browserbaseTriggerPolicy !== "DISABLED" ? "CONDITIONAL" : "OFF",
+              phase: "PHASE 4",
+              desc: "Triggered web research on high-interest setups. Runs after DJZS APPROVED or HIGH_CONFIDENCE. Adds a research phase to the scan job. Requires BROWSERBASE_API_KEY.",
+              config: `POLICY: ${constraints?.browserbaseTriggerPolicy ?? "DISABLED"}`,
+            },
+            {
+              name: "PYTH VERIFICATION",
+              provider: "PYTH NETWORK",
+              status: constraints?.pythConfidenceFilter ? "CONDITIONAL" : "OFF",
+              phase: "PHASE 3 OPTIONAL",
+              desc: "Live price confidence overlay from Pyth Hermes REST API. When enabled, low-confidence prices degrade APPROVED to DEGRADED. Free — no key required.",
+              config: `FILTER: ${constraints?.pythConfidenceFilter ? "ENABLED" : "DISABLED"} — THR: ${constraints?.pythConfidenceThreshold ?? 0.95}`,
+            },
+            {
+              name: "TELEGRAM ROUTING",
+              provider: "TELEGRAM BOT API",
+              status: constraints?.alertRouting?.telegram ? "CONDITIONAL" : "OFF",
+              phase: "PHASE 4",
+              desc: "Sends APPROVED signal packets as formatted Telegram messages to a configured chat. Enable in alert routing. Requires TELEGRAM_BOT_TOKEN and chat ID.",
+              config: `ROUTING: ${constraints?.alertRouting?.telegram ? "ENABLED" : "DISABLED"}`,
+            },
+            {
+              name: "XMTP ROUTING",
+              provider: "XMTP PROTOCOL",
+              status: constraints?.alertRouting?.xmtp ? "CONDITIONAL" : "OFF",
+              phase: "PHASE 4",
+              desc: "Decentralized wallet-to-wallet delivery of APPROVED signal packets. Enable in alert routing. Requires XMTP_PRIVATE_KEY and destination address.",
+              config: `ROUTING: ${constraints?.alertRouting?.xmtp ? "ENABLED" : "DISABLED"}`,
+            },
+            {
+              name: "CODEBASE INSPECTION",
+              provider: "INTERNAL MCP TOOL",
+              status: "PLANNED",
+              phase: "PHASE 5",
+              desc: "Allows a Hermes agent to read and reason over the DST/DJZS codebase to diagnose constraint conflicts or audit rule drift. Controlled MCP extension — not active in Phase 3.",
+              config: "STATUS: NOT WIRED — MCP EXTENSION LAYER",
+            },
+            {
+              name: "CODING HELPERS",
+              provider: "INTERNAL MCP TOOL",
+              status: "PLANNED",
+              phase: "PHASE 5",
+              desc: "Allows a Hermes runtime agent to propose constraint changes or rule adjustments as diffs for human review. Always requires explicit approval — never auto-applies.",
+              config: "STATUS: NOT WIRED — MCP EXTENSION LAYER",
+            },
+          ].map((skill) => (
+            <div key={skill.name} className="bg-card p-4 flex flex-col gap-2">
+              <div className="flex items-start justify-between">
+                <div className="font-mono text-xs font-bold text-foreground uppercase">{skill.name}</div>
+                <span className={cn(
+                  "text-[9px]",
+                  skill.status === "CONDITIONAL" ? "chip-warn" :
+                  skill.status === "OFF" ? "chip-neutral" : "chip-neutral opacity-60"
+                )}>{skill.status}</span>
+              </div>
+              <div className="font-mono text-[9px] text-muted-foreground/50 uppercase">{skill.provider} — {skill.phase}</div>
+              <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{skill.desc}</p>
+              <div className="mt-auto pt-2 border-t border-border font-mono text-[9px] text-muted-foreground/50">{skill.config}</div>
+            </div>
+          ))}
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground/50 italic mt-4 border-t border-border pt-4">
+          Optional skills augment Hermes scan jobs with additional evidence. They are always additive — they feed evidence into DJZS, never around it.
+        </p>
+      </div>
+
+      {/* MCP EXTENSION LAYER + NOUS PORTAL */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* MCP EXTENSION LAYER */}
+        <div className="bg-card border border-border p-6 flex flex-col gap-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-sm font-mono font-bold text-foreground uppercase tracking-widest">MCP EXTENSION LAYER</h2>
+              <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-1">Controlled integration — later phase only</p>
+            </div>
+            <span className="chip-neutral text-[10px] opacity-60">PHASE 5</span>
+          </div>
+          <div className="border border-border bg-background p-4 space-y-3">
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              MCP (Model Context Protocol) is reserved as a controlled extension layer for Phase 5. It is not central to Hermes in Phase 3. When activated, MCP tools will allow a Hermes runtime agent to interact with external systems (codebase inspection, research tools, coding helpers) under strict human-approval gating.
+            </p>
+            <div className="space-y-2 pt-2 border-t border-border">
+              {[
+                { tool: "CODEBASE READER", use: "Inspect DST/DJZS rule files for constraint drift diagnostics", gate: "READ-ONLY" },
+                { tool: "DIFF PROPOSER", use: "Propose constraint or rule changes as human-reviewed diffs", gate: "APPROVAL REQUIRED" },
+                { tool: "WEB RESEARCHER", use: "Triggered narrative research on high-interest approved setups", gate: "APPROVED_ONLY POLICY" },
+              ].map((t) => (
+                <div key={t.tool} className="flex items-start gap-3">
+                  <div className="w-2 h-2 border border-muted-foreground/30 mt-1 shrink-0" />
+                  <div>
+                    <div className="font-mono text-[10px] font-bold text-foreground uppercase">{t.tool}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground">{t.use}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground/50 uppercase">{t.gate}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="font-mono text-[10px] text-muted-foreground/50 italic">
+            MCP is not active and is not required for Phase 3 operation. It will not be enabled without explicit configuration and human-approval gates on all write actions.
+          </p>
+        </div>
+
+        {/* NOUS PORTAL */}
+        <div className="bg-card border border-border p-6 flex flex-col gap-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-sm font-mono font-bold text-foreground uppercase tracking-widest">NOUS PORTAL</h2>
+              <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-1">Optional LLM provider backend — not a system dependency</p>
+            </div>
+            <span className="chip-neutral text-[10px]">OPTIONAL</span>
+          </div>
+          <div className="border border-border bg-background p-4 space-y-3">
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              Nous Portal is an optional provider/backend choice for any AI or LLM-assisted capabilities in Hermes (e.g., research summarization, finding interpretation). It is not a runtime dependency. DST, DJZS, and all core Hermes functions operate without it.
+            </p>
+            <div className="pt-2 border-t border-border space-y-2">
+              {[
+                { label: "SYSTEM DEPENDENCY", value: "NO — all core functions run without it" },
+                { label: "USE CASE", value: "LLM provider for optional agent research layer" },
+                { label: "ALTERNATIVES", value: "Any compatible inference endpoint" },
+                { label: "CONFIGURATION", value: "NOUS_API_KEY env var (not required)" },
+                { label: "PHASE", value: "Phase 5 optional skill layer" },
+              ].map((row) => (
+                <div key={row.label} className="flex gap-3 font-mono text-[9px]">
+                  <div className="w-40 shrink-0 text-muted-foreground/50 uppercase">{row.label}</div>
+                  <div className="text-muted-foreground">{row.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="font-mono text-[10px] text-muted-foreground/50 italic">
+            Nous Portal can be swapped for any compatible inference provider. The system is designed to be provider-agnostic. No Nous dependency is baked into Phase 3 architecture.
+          </p>
         </div>
       </div>
 

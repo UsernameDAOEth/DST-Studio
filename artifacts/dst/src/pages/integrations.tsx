@@ -26,6 +26,49 @@ export default function Integrations() {
         <p className="text-muted-foreground font-mono text-xs uppercase">SYSTEM EXPANSION SCAFFOLD — PHASE 2 / 3 / 4</p>
       </div>
 
+      {/* ARCHITECTURE MODEL */}
+      <div className="bg-card border border-border p-5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xs font-mono font-bold text-foreground uppercase tracking-widest">INTEGRATION ARCHITECTURE MODEL</h2>
+            <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-1">
+              How external systems connect to DST/Hermes — and where they sit in the authority chain
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-px bg-border text-[10px] font-mono">
+          <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">INTEGRATION TIER</div>
+          <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">ROLE</div>
+          <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">AUTHORITY</div>
+          <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">PHASE</div>
+          {[
+            { tier: "DEFILAMMA", role: "Primary data layer — market data, regime, indicators", authority: "REQUIRED INPUT", phase: "CORE" },
+            { tier: "PYTH NETWORK", role: "Price confidence overlay — degrades but never approves", authority: "EVIDENCE ONLY", phase: "PHASE 3" },
+            { tier: "BROWSERBASE", role: "Triggered narrative research on APPROVED setups", authority: "EVIDENCE ONLY", phase: "PHASE 4" },
+            { tier: "TELEGRAM / XMTP / DC", role: "Alert delivery — routes post-DJZS approved packets", authority: "ROUTING ONLY", phase: "PHASE 4" },
+            { tier: "NOUS PORTAL", role: "Optional LLM provider for agent research layer", authority: "NO AUTHORITY", phase: "OPTIONAL" },
+            { tier: "MCP TOOLS", role: "Controlled extension — codebase inspection, diffs", authority: "READ / HUMAN-GATED", phase: "PHASE 5" },
+          ].map((row, i) => (
+            <div key={i} className="contents">
+              <div className={cn("px-3 py-2 font-bold text-foreground", i % 2 === 0 ? "bg-card" : "bg-background")}>{row.tier}</div>
+              <div className={cn("px-3 py-2 text-muted-foreground", i % 2 === 0 ? "bg-card" : "bg-background")}>{row.role}</div>
+              <div className={cn("px-3 py-2 text-muted-foreground/70", i % 2 === 0 ? "bg-card" : "bg-background")}>{row.authority}</div>
+              <div className={cn("px-3 py-2", i % 2 === 0 ? "bg-card" : "bg-background")}>
+                <span className={cn(
+                  "chip text-[9px]",
+                  row.phase === "CORE" ? "chip-pass" :
+                  row.phase === "PHASE 3" ? "chip-warn" :
+                  row.phase === "OPTIONAL" ? "chip-neutral" : "chip-neutral opacity-70"
+                )}>{row.phase}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="font-mono text-[9px] text-muted-foreground/50 italic border-t border-border pt-3">
+          No integration has scoring or verdict authority. DJZS is the only authority in the system. All integrations feed evidence or route output — never both.
+        </p>
+      </div>
+
       {/* LIVE INTEGRATION DATA */}
       <div className="space-y-4">
         <h2 className="text-sm font-mono text-muted-foreground uppercase">LIVE INTEGRATION DATA</h2>
@@ -77,6 +120,44 @@ export default function Integrations() {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* NOUS PORTAL — OPTIONAL PROVIDER */}
+      <div className="bg-card border border-border p-5 space-y-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xs font-mono font-bold text-foreground uppercase tracking-widest">NOUS PORTAL — OPTIONAL PROVIDER BACKEND</h2>
+            <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-1">
+              Optional LLM inference backend for Hermes agent layer — not a system dependency
+            </p>
+          </div>
+          <span className="chip-neutral text-[9px]">OPTIONAL</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              Nous Portal can serve as the LLM inference backend for any AI-assisted Hermes capabilities — such as research summarization, finding interpretation, or agent-assisted constraint review. It is not required for any Phase 3 functionality.
+            </p>
+            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+              DST signal computation, DJZS audit, Hermes scan orchestration, Pyth integration, and all core runtime functions operate entirely without Nous Portal or any LLM provider. It becomes relevant only when optional agent skills (Phase 5) are activated.
+            </p>
+          </div>
+          <div className="border border-border bg-background p-4 space-y-2">
+            {[
+              { label: "SYSTEM DEPENDENCY", value: "NONE — core functions run without it", ok: true },
+              { label: "USE CASE", value: "LLM provider for optional Hermes agent layer", ok: true },
+              { label: "ALTERNATIVES", value: "Any compatible inference endpoint (OpenAI, Anthropic, etc.)", ok: true },
+              { label: "ENV KEY", value: "NOUS_API_KEY (not required in Phase 3)", ok: false },
+              { label: "AUTHORITY", value: "No verdict authority. Evidence input only.", ok: true },
+              { label: "PHASE", value: "Phase 5 — optional skills layer", ok: false },
+            ].map((row) => (
+              <div key={row.label} className="flex items-start gap-3 font-mono text-[9px]">
+                <div className="w-32 shrink-0 text-muted-foreground/50 uppercase">{row.label}</div>
+                <div className={row.ok ? "text-muted-foreground" : "text-muted-foreground/50"}>{row.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <p className="text-body max-w-3xl leading-relaxed">
