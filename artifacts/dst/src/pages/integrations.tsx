@@ -36,23 +36,31 @@ export default function Integrations() {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-px bg-border text-[10px] font-mono">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-px bg-border text-[10px] font-mono">
           <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">INTEGRATION TIER</div>
           <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">ROLE</div>
           <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">AUTHORITY</div>
+          <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">SCOPE TOKEN</div>
           <div className="bg-secondary px-3 py-2 font-bold text-muted-foreground uppercase">PHASE</div>
           {[
-            { tier: "DEFILAMMA", role: "Primary data layer — market data, regime, indicators", authority: "REQUIRED INPUT", phase: "CORE" },
-            { tier: "PYTH NETWORK", role: "Price confidence overlay — degrades but never approves", authority: "EVIDENCE ONLY", phase: "PHASE 3" },
-            { tier: "BROWSERBASE", role: "Triggered narrative research on APPROVED setups", authority: "EVIDENCE ONLY", phase: "PHASE 4" },
-            { tier: "TELEGRAM / XMTP / DC", role: "Alert delivery — routes post-DJZS approved packets", authority: "ROUTING ONLY", phase: "PHASE 4" },
-            { tier: "NOUS PORTAL", role: "Optional LLM provider for agent research layer", authority: "NO AUTHORITY", phase: "OPTIONAL" },
-            { tier: "MCP TOOLS", role: "Controlled extension — codebase inspection, diffs", authority: "READ / HUMAN-GATED", phase: "PHASE 5" },
+            { tier: "DEFILAMMA",           role: "Primary data layer — market data, regime, indicators",         authority: "REQUIRED INPUT",       scope: "N/A — always loaded",        phase: "CORE"     },
+            { tier: "PYTH NETWORK",        role: "Price confidence overlay — degrades but never approves",       authority: "EVIDENCE ONLY",        scope: "pyth:read",                  phase: "PHASE 3"  },
+            { tier: "BROWSERBASE",         role: "Triggered narrative research — full sanitize before evidence", authority: "EVIDENCE ONLY",        scope: "browserbase:fetch",          phase: "PHASE 4"  },
+            { tier: "TELEGRAM / XMTP / DC",role: "Alert delivery — post-DJZS approved packets only",            authority: "ROUTING ONLY",         scope: "telegram/xmtp/discord:write", phase: "PHASE 4"  },
+            { tier: "NOUS PORTAL",         role: "Optional LLM provider for Hermes agent research layer",       authority: "NO AUTHORITY",         scope: "N/A — evidence input only",  phase: "OPTIONAL" },
+            { tier: "MCP TOOLS",           role: "Controlled codebase inspection — read-only, human-gated",     authority: "READ / HUMAN-GATED",   scope: "mcp:inspect (never auto-granted)", phase: "PHASE 5"  },
           ].map((row, i) => (
             <div key={i} className="contents">
               <div className={cn("px-3 py-2 font-bold text-foreground", i % 2 === 0 ? "bg-card" : "bg-background")}>{row.tier}</div>
               <div className={cn("px-3 py-2 text-muted-foreground", i % 2 === 0 ? "bg-card" : "bg-background")}>{row.role}</div>
               <div className={cn("px-3 py-2 text-muted-foreground/70", i % 2 === 0 ? "bg-card" : "bg-background")}>{row.authority}</div>
+              <div className={cn("px-3 py-2", i % 2 === 0 ? "bg-card" : "bg-background")}>
+                <span className={cn("font-mono text-[9px]",
+                  row.scope.startsWith("N/A") ? "text-muted-foreground/30" :
+                  row.scope.includes("never") ? "text-muted-foreground/50 italic" :
+                  "text-primary/60"
+                )}>{row.scope}</span>
+              </div>
               <div className={cn("px-3 py-2", i % 2 === 0 ? "bg-card" : "bg-background")}>
                 <span className={cn(
                   "chip text-[9px]",
@@ -65,8 +73,57 @@ export default function Integrations() {
           ))}
         </div>
         <p className="font-mono text-[9px] text-muted-foreground/50 italic border-t border-border pt-3">
-          No integration has scoring or verdict authority. DJZS is the only authority in the system. All integrations feed evidence or route output — never both.
+          No integration has scoring or verdict authority. DJZS is the only authority in the system. Scope tokens are granted via runtime constraints and can be revoked instantly. Coding and repo-assistance integrations are permanently deferred from the Hermes runtime.
         </p>
+      </div>
+
+      {/* HERMES SECURITY BOUNDARY */}
+      <div className="bg-card border border-border p-5 space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xs font-mono font-bold text-foreground uppercase tracking-widest">HERMES SECURITY BOUNDARY</h2>
+            <p className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-widest mt-1">
+              Safeguards enforced at runtime — not configurable — not bypassable by any integration
+            </p>
+          </div>
+          <span className="chip-pass text-[9px]">ENFORCED</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-border">
+          {[
+            {
+              label: "SCOPE TOKEN SYSTEM",
+              desc: "Every optional skill requires a scope token granted by runtime constraints. No token = skill does not run. Revocation is immediate on next scan cycle.",
+              status: "ACTIVE",
+            },
+            {
+              label: "VERDICT IMMUTABILITY GATE",
+              desc: "DJZS verdict payload is sealed at submission. Hermes cannot read, modify, or re-submit after the gate closes. Verdict is recorded as-is in the action log.",
+              status: "ACTIVE",
+            },
+            {
+              label: "SKILL OUTPUT SANITIZATION",
+              desc: "All untrusted skill output (Browserbase HTML, MCP tool output, webhooks) is stripped, schema-validated, and truncated before entering any evidence bundle.",
+              status: "ACTIVE",
+            },
+            {
+              label: "APPEND-ONLY ACTION LOG",
+              desc: "Every Hermes runtime action is logged with scope token, sanitize verdict, and outcome. Log is append-only with hash-chain tamper detection. Phase 4 implementation.",
+              status: "PLANNED",
+            },
+          ].map((item) => (
+            <div key={item.label} className="bg-card p-4 flex flex-col gap-2">
+              <div className="flex items-start justify-between">
+                <div className="font-mono text-[10px] font-bold text-foreground uppercase">{item.label}</div>
+                <span className={cn("text-[9px] shrink-0 ml-2", item.status === "ACTIVE" ? "chip-pass" : "chip-neutral opacity-70")}>{item.status}</span>
+              </div>
+              <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">{item.desc}</p>
+            </div>
+          ))}
+        </div>
+        <div className="border border-[hsl(var(--trade-wait))]/20 bg-[hsl(var(--trade-wait))]/5 px-4 py-3">
+          <span className="font-mono text-[9px] text-[hsl(var(--trade-wait))]/70 font-bold uppercase">DEFERRED: </span>
+          <span className="font-mono text-[9px] text-muted-foreground/60">CODING_ASSISTANT and REPO_ASSISTANT skills are permanently excluded from the Hermes integration surface. Hermes is an audit-before-act orchestrator — not an engineering agent. See the Skills Manifest tab on the Hermes page for full deferral details.</span>
+        </div>
       </div>
 
       {/* LIVE INTEGRATION DATA */}

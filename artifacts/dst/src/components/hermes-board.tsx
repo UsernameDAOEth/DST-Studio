@@ -24,6 +24,17 @@ function humanTaskType(t: string) {
   return t.replace(/_/g, " ");
 }
 
+function taskPriorityMeta(taskType: string): { label: string; color: string } {
+  const t = String(taskType).toUpperCase();
+  if (t === "DJZS_AUDIT" || t === "ATTACH_TO_AUDIT")
+    return { label: "CRIT", color: "text-red-400/80" };
+  if (t === "FETCH_MARKET_CONTEXT" || t === "VERIFY_PRICE_STATE")
+    return { label: "HIGH", color: "text-yellow-400/70" };
+  if (t === "ROUTE_RESULT")
+    return { label: "LOW", color: "text-muted-foreground/30" };
+  return { label: "NORM", color: "text-muted-foreground/40" };
+}
+
 function duration(started: string | null | undefined, finished: string | null | undefined): string {
   if (!started) return "—";
   const end = finished ? new Date(finished) : new Date();
@@ -93,6 +104,17 @@ function WorkerChip({ w }: { w: HermesWorker }) {
           </span>
         )}
       </div>
+      <div className="flex items-center gap-1 mt-0.5 pt-0.5 border-t border-border/40">
+        <span className={cn(
+          "w-1 h-1 rounded-full shrink-0",
+          isBusy  ? "bg-yellow-400 animate-pulse" :
+          isError ? "bg-red-400" :
+                    "bg-emerald-400/40",
+        )} />
+        <span className="font-mono text-[7px] text-muted-foreground/40 uppercase tracking-widest">
+          {isBusy ? "HB: LIVE" : isError ? "HB: STALE" : "HB: IDLE"}
+        </span>
+      </div>
     </div>
   );
 }
@@ -140,9 +162,14 @@ function TaskCard({
         <span className="font-mono text-[9px] font-bold text-foreground uppercase leading-tight">
           {humanTaskType(task.task_type)}
         </span>
-        {isRunning && (
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse shrink-0 mt-0.5" />
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={cn("font-mono text-[7px] uppercase font-bold", taskPriorityMeta(task.task_type as string).color)}>
+            {taskPriorityMeta(task.task_type as string).label}
+          </span>
+          {isRunning && (
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -431,11 +458,17 @@ export default function HermesBoardPage() {
           <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
             SYSTEM HEALTH
           </h3>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
             <HealthStat label="RUNS TODAY"    value={health?.total_runs_today  ?? 0} />
             <HealthStat label="FAILED TASKS"  value={health?.failed_tasks_today ?? 0} warn />
             <HealthStat label="BLOCKED"       value={health?.blocked_tasks ?? 0}     warn />
             <HealthStat label="WORKER ERRORS" value={health?.worker_errors  ?? 0}    warn />
+            <HealthStat label="RUNS/HOUR"     value={health ? Math.round((health.total_runs_today ?? 0) / Math.max(1, new Date().getHours() + 1)) : 0} />
+          </div>
+          <div className="mt-3 pt-3 border-t border-border flex items-center gap-2">
+            <span className="font-mono text-[7px] text-muted-foreground/40 uppercase tracking-widest">QUOTA AWARENESS</span>
+            <div className="flex-1 h-px bg-border" />
+            <span className="font-mono text-[7px] text-muted-foreground/30 uppercase">RATE LIMITS: DEFILAMMA · PYTH · DELIVERY CHANNELS</span>
           </div>
         </div>
       </div>
@@ -615,13 +648,110 @@ export default function HermesBoardPage() {
         </div>
       )}
 
+      {/* DEAD-LETTER QUEUE (DLQ) */}
+      {(() => {
+        const dlqTasks = (board?.runs ?? []).flatMap((r) =>
+          r.tasks.filter(
+            (t) =>
+              t.status === (HermesTaskStatus.FAILED as string) &&
+              t.retry_count >= t.max_retries,
+          ),
+        );
+        return (
+          <div className="bg-card border border-red-500/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-foreground flex items-center gap-2">
+                  DEAD-LETTER QUEUE (DLQ)
+                  {dlqTasks.length > 0 && (
+                    <span className="font-mono text-[8px] border border-red-500/40 text-red-400 px-1.5 py-0.5">
+                      {dlqTasks.length} TASK{dlqTasks.length !== 1 ? "S" : ""}
+                    </span>
+                  )}
+                </h3>
+                <p className="font-mono text-[8px] text-muted-foreground/40 uppercase mt-0.5">
+                  Tasks that exhausted all retries — require manual inspection before re-queue
+                </p>
+              </div>
+              {dlqTasks.length === 0 && (
+                <span className="font-mono text-[8px] text-emerald-400/60 border border-emerald-500/20 px-1.5 py-0.5">CLEAR</span>
+              )}
+            </div>
+
+            {dlqTasks.length === 0 ? (
+              <p className="font-mono text-[8px] text-muted-foreground/30 text-center py-4 uppercase">
+                No tasks in DLQ — all failed tasks have retries remaining
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {dlqTasks.map((task) => (
+                  <div key={task.task_id} className="border border-red-500/30 bg-red-500/5 p-3 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[8px] font-bold text-red-400 uppercase">
+                          {humanTaskType(task.task_type)}
+                        </span>
+                        <span className="font-mono text-[8px] border border-border px-1 text-muted-foreground">{task.asset}</span>
+                        <span className="font-mono text-[8px] text-muted-foreground/50">{task.timeframe}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={cn("font-mono text-[7px]", taskPriorityMeta(task.task_type as string).color)}>
+                          {taskPriorityMeta(task.task_type as string).label}
+                        </span>
+                        <span className="font-mono text-[8px] text-red-400 border border-red-500/30 px-1.5 py-0.5">DLQ</span>
+                      </div>
+                    </div>
+                    {task.error_code && (
+                      <div className="font-mono text-[8px] text-red-400/80">
+                        ERROR: {task.error_code} · RETRIES: {task.retry_count}/{task.max_retries} (EXHAUSTED)
+                      </div>
+                    )}
+                    {task.blocked_reason && (
+                      <div className="font-mono text-[8px] text-orange-400/70">{task.blocked_reason}</div>
+                    )}
+                    <div className="font-mono text-[7px] text-muted-foreground/30 uppercase">
+                      RUN: {task.run_id} · TASK: {task.task_id}
+                    </div>
+                  </div>
+                ))}
+                <p className="font-mono text-[8px] text-muted-foreground/40 italic pt-1">
+                  DLQ tasks require root-cause investigation before re-queue. Re-triggering a new scan run will create fresh tasks — DLQ entries are preserved for audit.
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* WHAT HERMES DID NOT DO — BOARD SUMMARY */}
+      <div className="border border-primary/10 bg-primary/3 px-4 py-3">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="font-mono text-[8px] font-bold text-primary/60 uppercase tracking-widest">WHAT HERMES DID NOT DO — THIS BOARD CYCLE</span>
+          <div className="flex-1 h-px bg-border" />
+          <span className="font-mono text-[8px] text-emerald-400/50 border border-emerald-500/20 px-1">BOUNDARY INTACT</span>
+        </div>
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          {[
+            "DID NOT score any signal",
+            "DID NOT modify any DJZS verdict",
+            "DID NOT route WAIT verdicts",
+            "DID NOT bypass the immutability gate",
+            "DID NOT accept unsanitized skill output",
+            "DID NOT execute any trade",
+          ].map((item) => (
+            <span key={item} className="font-mono text-[7px] text-muted-foreground/30 uppercase">✗ {item}</span>
+          ))}
+        </div>
+      </div>
+
       {/* BOUNDARY FOOTER */}
       <div className="border border-border px-4 py-3">
         <p className="font-mono text-[8px] text-muted-foreground/40 uppercase leading-relaxed">
           HERMES KANBAN — WORKFLOW COORDINATION ONLY · TASK STATUSES: TRIAGE → READY → IN PROGRESS → BLOCKED / DONE / FAILED ·
           DJZS AUDIT AT ATTACH_TO_AUDIT IS DETERMINISTIC — NO KANBAN OVERRIDE IS POSSIBLE ·
           BLOCKED STATE SURFACES FAILED UPSTREAM DEPENDENCIES WITHOUT SILENT PASS-THROUGH ·
-          RETRY CONTROLS RE-QUEUE FAILED TASKS ONLY — THEY DO NOT MODIFY AUDIT RULES OR SIGNAL SCORING
+          RETRY CONTROLS RE-QUEUE FAILED TASKS ONLY — THEY DO NOT MODIFY AUDIT RULES OR SIGNAL SCORING ·
+          DLQ INSPECTION REQUIRES HUMAN ACKNOWLEDGMENT — NO AUTO-CLEAR
         </p>
       </div>
 
