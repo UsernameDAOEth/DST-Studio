@@ -839,6 +839,13 @@ export const GetAuditByAssetParams = zod.object({
   asset: zod.coerce.string(),
 });
 
+export const GetAuditByAssetQueryParams = zod.object({
+  signalId: zod.coerce
+    .number()
+    .optional()
+    .describe("Pin audit to a specific signal snapshot by ID"),
+});
+
 export const GetAuditByAssetResponse = zod.object({
   asset: zod.string(),
   verdict: zod.enum(["PASS", "FAIL", "WAIT"]),

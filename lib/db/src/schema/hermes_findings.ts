@@ -15,6 +15,7 @@ export const hermesFindingsTable = pgTable("hermes_findings", {
   confidence: numeric("confidence", { precision: 4, scale: 3 }).notNull().default("0"),
   suggestedFlags: jsonb("suggested_flags").notNull().$type<string[]>().default([]),
   status: text("status").notNull().default("ACTIVE"),
+  contentHash: text("content_hash"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

@@ -1427,6 +1427,13 @@ export const GetSignalsTimeframe = {
   "1D": "1D",
 } as const;
 
+export type GetAuditByAssetParams = {
+  /**
+   * Pin audit to a specific signal snapshot by ID
+   */
+  signalId?: number;
+};
+
 export type GetSignalFeedParams = {
   limit?: number;
 };

@@ -25,6 +25,7 @@ import type {
   CreateAlert,
   CreateHermesRunRequest,
   CreateWatchlistEntry,
+  GetAuditByAssetParams,
   GetHermesFindingsParams,
   GetHermesJobsParams,
   GetHermesMetricsParams,
@@ -487,22 +488,41 @@ export function useGetMarketSnapshotByAsset<
 /**
  * @summary Get full DJZS audit breakdown for an asset
  */
-export const getGetAuditByAssetUrl = (asset: string) => {
-  return `/api/audit/${asset}`;
+export const getGetAuditByAssetUrl = (
+  asset: string,
+  params?: GetAuditByAssetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/audit/${asset}?${stringifiedParams}`
+    : `/api/audit/${asset}`;
 };
 
 export const getAuditByAsset = async (
   asset: string,
+  params?: GetAuditByAssetParams,
   options?: RequestInit,
 ): Promise<AuditReport> => {
-  return customFetch<AuditReport>(getGetAuditByAssetUrl(asset), {
+  return customFetch<AuditReport>(getGetAuditByAssetUrl(asset, params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetAuditByAssetQueryKey = (asset: string) => {
-  return [`/api/audit/${asset}`] as const;
+export const getGetAuditByAssetQueryKey = (
+  asset: string,
+  params?: GetAuditByAssetParams,
+) => {
+  return [`/api/audit/${asset}`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetAuditByAssetQueryOptions = <
@@ -510,6 +530,7 @@ export const getGetAuditByAssetQueryOptions = <
   TError = ErrorType<unknown>,
 >(
   asset: string,
+  params?: GetAuditByAssetParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getAuditByAsset>>,
@@ -521,11 +542,12 @@ export const getGetAuditByAssetQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetAuditByAssetQueryKey(asset);
+  const queryKey =
+    queryOptions?.queryKey ?? getGetAuditByAssetQueryKey(asset, params);
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuditByAsset>>> = ({
     signal,
-  }) => getAuditByAsset(asset, { signal, ...requestOptions });
+  }) => getAuditByAsset(asset, params, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -553,6 +575,7 @@ export function useGetAuditByAsset<
   TError = ErrorType<unknown>,
 >(
   asset: string,
+  params?: GetAuditByAssetParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getAuditByAsset>>,
@@ -562,7 +585,7 @@ export function useGetAuditByAsset<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetAuditByAssetQueryOptions(asset, options);
+  const queryOptions = getGetAuditByAssetQueryOptions(asset, params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

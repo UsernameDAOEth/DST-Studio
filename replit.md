@@ -69,11 +69,12 @@ Boundary doctrine is enforced at every layer:
 - **POST /api/hermes/findings** — protected ingress. Accepts SubmitFindingRequest, validates via Zod, persists to `hermes_findings` DB table, returns `SubmitFindingAccepted` with BOUNDARY_REMINDER in every response.
 - **GET /api/hermes/findings** — recent findings log (up to 100)
 - **GET /api/hermes/findings/:target** — active findings for an asset (used in signal-detail hermesContext section)
-- **`hermes_findings` DB table** — findingId, runId, sourceAgent, marketType, target, observationType, summary, evidence (jsonb), confidence (numeric metadata, never used for scoring), suggestedFlags, status (ACTIVE/EXPIRED/DISMISSED), expiresAt
+- **`hermes_findings` DB table** — findingId, runId, sourceAgent, marketType, target, observationType, summary, evidence (jsonb), confidence (numeric metadata, never used for scoring), suggestedFlags, status (ACTIVE/EXPIRED/DISMISSED), expiresAt, contentHash (sha256 dedup key — target+observationType+summary)
+- **Findings dedup**: sha256 content hash on (target, observationType, summary). Checks for matching hash within same runId or 5-minute window before inserting. Best-effort (application-level, no DB unique constraint).
 - **BOUNDARY_REMINDER** (constant): "HERMES SUBMITS FINDINGS ONLY. Confidence is metadata — not a score. Suggested flags are hints — not verdicts. DJZS is the deterministic audit gate. Capital movement requires the user's decision."
 
 ### Codegen Pipeline
-- `lib/api-spec/fix-api-zod-index.mjs` — post-codegen fixup that strips a phantom `api.schemas` export from Orval v8 generated `lib/api-zod/src/index.ts`
+- `lib/api-spec/fix-api-zod-index.mjs` — post-codegen fixup that strips phantom `api.schemas` exports and resolves duplicate type/value exports between `generated/api.ts` and `generated/types/` using `export type` re-exports
 - Codegen command: `pnpm --filter @workspace/api-spec run codegen`
 
 ### Signal Engine — Phase 2 Logic
@@ -88,7 +89,7 @@ Boundary doctrine is enforced at every layer:
 - **Narrative risk assessment**: regime=RANGING + momentum codes → NARRATIVE_HEAVY
 - **Process verdict**: APPROVED / REJECTED / DEGRADED (separate from direction and DJZS verdict)
 - **Logic admissibility**: ADMISSIBLE / INADMISSIBLE / CONDITIONAL
-- **Process quality grade**: A–F
+- **Process quality grade**: A–F (ProcessGradeBadge with Radix Tooltip explaining each grade; F shows inline "HARD RULE FAILURE" label)
 - **Pre-trade checklist**: thesis, regime, entry zone, invalidation, target, reason codes, reject conditions, R/R
 - **Outcome tracking**: scaffolded stub, all nulls until Phase 3
 
@@ -100,7 +101,7 @@ Boundary doctrine is enforced at every layer:
 - `GET /api/signals/:asset` — signal detail with pre-trade checklist, process verdict, outcome stub
 - `GET /api/signals/feed` — chronological feed with processVerdict, setupFamily, rrRatio
 - `GET /api/market/snapshot` / `/:asset` — market data
-- `GET /api/audit/:asset` — DJZS audit report
+- `GET /api/audit/:asset?signalId=N` — DJZS audit report (optional signalId pins to stored signal snapshot; strict: 404 if signal not found, 400 if asset mismatch)
 - `GET/POST /api/watchlist`, `DELETE /api/watchlist/:id`
 - `GET/POST /api/alerts`, `DELETE /api/alerts/:id`
 - `POST /api/agent/chat` — agent chat
@@ -133,9 +134,9 @@ Boundary doctrine is enforced at every layer:
 - **MPP** (ENRICHMENT) — institutional flow enrichment, requires `MPP_API_KEY`, Phase 4
 
 ### Frontend Pages
-- `/` Dashboard (Admissibility Console) — 3-layer positioning strip (DST FINDS / DJZS GATES / HERMES RUNS), asset cards with prominent WAIT panels, signal feed with WAIT-bias framing
-- `/signal/:asset` — Canonical trade packet: header + decision gate (DJZS + process verdict side-by-side) + prominent rejection/WAIT panel + trade parameters + routing priority + thesis + checklist + market evidence
-- `/audit/:asset` — DJZS audit breakdown
+- `/` Dashboard (Admissibility Console) — 3-layer positioning strip (DST FINDS / DJZS GATES / HERMES RUNS), asset cards with unified VerdictBadge (replaces AuditChip), signal feed with VerdictBadge + Empty component for empty state
+- `/signal/:asset` — Canonical trade packet: header + PipelineIndicators (estimated OI/funding/volume, Pyth/browserbase/routing status chips) + decision gate (DJZS + process verdict side-by-side) + prominent rejection/WAIT panel + trade parameters + routing priority + thesis + checklist + market evidence. VIEW AUDIT link passes signalId for pinned audit.
+- `/audit/:asset?signalId=N` — DJZS audit breakdown; pinned to signal snapshot when signalId provided (shows "PINNED TO SIGNAL #N"); uses VerdictBadge for check results, DJZS VERDICT naming, Empty component for not-found
 - `/watchlist` — tracked assets
 - `/alerts` — alert configuration
 - `/agent` — chat agent

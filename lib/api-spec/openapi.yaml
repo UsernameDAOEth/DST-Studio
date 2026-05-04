@@ -134,6 +134,12 @@ paths:
           required: true
           schema:
             type: string
+        - name: signalId
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Pin audit to a specific signal snapshot by ID
       responses:
         "200":
           description: Full DJZS audit report

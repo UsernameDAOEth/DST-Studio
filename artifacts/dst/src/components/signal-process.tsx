@@ -1,13 +1,40 @@
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, AlertTriangle, ShieldOff, ShieldCheck } from "lucide-react";
 import { PreTradeChecklist } from "@workspace/api-client-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
+export function VerdictBadge({ value, size = "sm" }: { value?: string; size?: "sm" | "lg" }) {
+  if (!value) return null;
+  const chipClass =
+    value === "PASS" || value === "APPROVED" || value === "ADMISSIBLE" ? "chip-pass" :
+    value === "FAIL" || value === "REJECTED" || value === "INADMISSIBLE" ? "chip-fail" :
+    value === "WARN" || value === "DEGRADED" || value === "CONDITIONAL" ? "chip-warn" :
+    value === "SKIP" ? "chip-skip" :
+    "chip-neutral";
+  const dotClass =
+    value === "PASS" || value === "APPROVED" || value === "ADMISSIBLE" ? "bg-primary" :
+    value === "FAIL" || value === "REJECTED" || value === "INADMISSIBLE" ? "bg-destructive" :
+    value === "WARN" || value === "DEGRADED" || value === "CONDITIONAL" ? "bg-[hsl(var(--trade-wait))]" :
+    null;
+  if (size === "lg") {
+    return (
+      <span className={cn(chipClass, "text-xs px-3 py-1")}>
+        {dotClass && <span className={cn("w-1.5 h-1.5 rounded-none mr-1.5 inline-block", dotClass)} />}
+        {value}
+      </span>
+    );
+  }
+  return (
+    <span className={chipClass}>
+      {dotClass && <span className={cn("w-1.5 h-1.5 rounded-none mr-1.5 inline-block", dotClass)} />}
+      {value}
+    </span>
+  );
+}
 
 export function ProcessVerdictBadge({ verdict }: { verdict?: string }) {
   if (!verdict) return null;
-  if (verdict === "APPROVED") return <span className="chip-pass"><span className="w-1.5 h-1.5 rounded-none bg-primary mr-1.5 inline-block"></span>APPROVED</span>;
-  if (verdict === "REJECTED") return <span className="chip-fail"><span className="w-1.5 h-1.5 rounded-none bg-destructive mr-1.5 inline-block"></span>REJECTED</span>;
-  if (verdict === "DEGRADED") return <span className="chip-warn"><span className="w-1.5 h-1.5 rounded-none bg-[hsl(var(--trade-wait))] mr-1.5 inline-block"></span>DEGRADED</span>;
-  return <span className="chip-neutral">{verdict}</span>;
+  return <VerdictBadge value={verdict} />;
 }
 
 export function LogicAdmissibilityBadge({ admissibility }: { admissibility?: string }) {
@@ -61,6 +88,14 @@ export function RejectionCodeList({ codes }: { codes?: string[] }) {
   );
 }
 
+const GRADE_TOOLTIPS: Record<string, string> = {
+  A: "All hard rules met, strong structural evidence, high-conviction setup",
+  B: "All hard rules met, moderate structural evidence",
+  C: "Marginal — some rules met, reduced conviction",
+  D: "Weak — multiple soft failures, significant risk of false signal",
+  F: "Hard execution rule failure — no admissible setup",
+};
+
 export function ProcessGradeBadge({ grade }: { grade?: string }) {
   if (!grade) return null;
   const gradeStyles: Record<string, string> = {
@@ -71,9 +106,26 @@ export function ProcessGradeBadge({ grade }: { grade?: string }) {
     F: "bg-destructive/25 text-destructive border-destructive/60",
   };
   const style = gradeStyles[grade] || "bg-muted text-muted-foreground border-border";
+  const tooltipText = GRADE_TOOLTIPS[grade] || "Process quality grade";
   return (
-    <div className={cn("w-11 h-11 flex items-center justify-center border font-mono text-xl font-bold rounded-none", style)}>
-      {grade}
+    <div className="flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={cn("w-11 h-11 flex items-center justify-center border font-mono text-xl font-bold rounded-none cursor-help", style)}
+          >
+            {grade}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="font-mono text-[10px] uppercase tracking-wider max-w-[220px] text-center">
+          {tooltipText}
+        </TooltipContent>
+      </Tooltip>
+      {grade === "F" && (
+        <span className="font-mono text-[9px] text-destructive/70 uppercase tracking-wider max-w-[120px] leading-tight">
+          HARD RULE FAILURE
+        </span>
+      )}
     </div>
   );
 }

@@ -34,6 +34,7 @@ export * from "./dataQualityReportFlagsItem";
 export * from "./dataQualityReportGrade";
 export * from "./evalReviewItem";
 export * from "./evalReviewItemRecommendation";
+export * from "./getAuditByAssetParams";
 export * from "./getHermesFindingsParams";
 export * from "./getHermesJobsParams";
 export * from "./getHermesMetricsParams";

@@ -1,9 +1,9 @@
 import { useParams, Link } from "wouter";
-import { useGetSignalByAsset, getGetSignalByAssetQueryKey } from "@workspace/api-client-react";
+import { useGetSignalByAsset, getGetSignalByAssetQueryKey, useGetHermesConstraints } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent, formatNumber, formatLargeNumber } from "@/lib/format";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
+import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ProcessVerdictBadge,
@@ -59,12 +59,47 @@ function PacketField({
   );
 }
 
+function PipelineIndicators({ dataQuality, constraints }: {
+  dataQuality?: { flags?: string[] };
+  constraints?: { pythConfidenceFilter?: boolean; browserbaseTriggerPolicy?: string; alertRouting?: { telegram?: boolean; xmtp?: boolean; discord?: boolean } };
+}) {
+  const flags = dataQuality?.flags ?? [];
+  const indicators: { label: string; active: boolean }[] = [];
+
+  if (flags.includes("SYNTHETIC_OI")) indicators.push({ label: "OI: ESTIMATED", active: true });
+  if (flags.includes("SYNTHETIC_FUNDING")) indicators.push({ label: "FUNDING: ESTIMATED", active: true });
+  if (flags.includes("VOLUME_MISSING")) indicators.push({ label: "VOLUME: UNAVAILABLE", active: true });
+
+  if (constraints) {
+    if (!constraints.pythConfidenceFilter) indicators.push({ label: "PYTH: DISABLED", active: true });
+    if (constraints.browserbaseTriggerPolicy === "DISABLED") indicators.push({ label: "BROWSERBASE: DISABLED", active: true });
+    const routing = constraints.alertRouting;
+    if (routing && !routing.telegram && !routing.xmtp && !routing.discord) {
+      indicators.push({ label: "ROUTING: NONE", active: true });
+    }
+  }
+
+  if (indicators.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border border-border/60 bg-card/50">
+      <AlertTriangle className="w-3 h-3 text-[hsl(var(--trade-wait))]/70 shrink-0" />
+      <span className="font-mono text-[9px] text-muted-foreground/60 uppercase tracking-widest mr-1">PIPELINE</span>
+      {indicators.map(ind => (
+        <span key={ind.label} className="chip-warn text-[8px]">{ind.label}</span>
+      ))}
+    </div>
+  );
+}
+
 export default function SignalDetail() {
   const { asset } = useParams();
 
   const { data: signal, isLoading } = useGetSignalByAsset(asset || "", {
     query: { enabled: !!asset, queryKey: getGetSignalByAssetQueryKey(asset || "") }
   });
+
+  const { data: hermesConstraints } = useGetHermesConstraints();
 
   if (isLoading) {
     return (
@@ -80,26 +115,36 @@ export default function SignalDetail() {
 
   if (!signal) {
     return (
-      <div className="text-center p-12">
-        <h2 className="text-xl tracking-widest mb-2">SIGNAL NOT FOUND</h2>
-        <p className="text-muted-foreground font-mono text-xs uppercase tracking-widest">
-          COULD NOT FIND SIGNAL DATA FOR {asset}
-        </p>
-        <Link href="/" className="text-primary hover:underline mt-4 inline-block font-mono text-xs tracking-wider">
-          ← RETURN TO DASHBOARD
+      <Empty className="max-w-md mx-auto mt-16 border-border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <AlertTriangle className="w-5 h-5" />
+          </EmptyMedia>
+          <EmptyTitle className="font-mono text-sm uppercase tracking-widest">
+            SIGNAL NOT FOUND
+          </EmptyTitle>
+          <EmptyDescription className="font-mono text-[10px] uppercase tracking-wider">
+            Could not find signal data for {asset}
+          </EmptyDescription>
+        </EmptyHeader>
+        <Link href="/" className="text-primary hover:underline font-mono text-xs uppercase tracking-wider">
+          RETURN TO DASHBOARD
         </Link>
-      </div>
+      </Empty>
     );
   }
 
   const { marketSnapshot, trendRegime, openInterestContext } = signal;
   const isWait = signal.direction === "WAIT";
   const isApproved = signal.processVerdict === "APPROVED";
+  const auditLink = signal.id
+    ? `/audit/${asset}?signalId=${signal.id}`
+    : `/audit/${asset}`;
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-16">
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div className="pb-4 border-b border-border">
         <div className="flex items-center gap-3 mb-3">
           <Link href="/">
@@ -139,7 +184,7 @@ export default function SignalDetail() {
 
           <div className="flex items-center gap-3">
             <ProcessGradeBadge grade={signal.processQualityGrade} />
-            <Link href={`/audit/${asset}`}>
+            <Link href={auditLink}>
               <div className="px-4 py-2 border border-border bg-card text-foreground font-mono text-[10px] uppercase tracking-widest hover:border-primary/40 hover:text-primary transition-colors cursor-pointer whitespace-nowrap">
                 VIEW AUDIT →
               </div>
@@ -148,7 +193,13 @@ export default function SignalDetail() {
         </div>
       </div>
 
-      {/* ── AUDIT VERDICT GATE ── */}
+      {/* PIPELINE INDICATORS */}
+      <PipelineIndicators
+        dataQuality={signal.dataQuality as { flags?: string[] } | undefined}
+        constraints={hermesConstraints as { pythConfidenceFilter?: boolean; browserbaseTriggerPolicy?: string; alertRouting?: { telegram?: boolean; xmtp?: boolean; discord?: boolean } } | undefined}
+      />
+
+      {/* AUDIT VERDICT GATE */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <DjzsGateBadge verdict={signal.verdictDjzs} admissibility={signal.logicAdmissibility} />
         <div className="terminal-panel">
@@ -175,7 +226,7 @@ export default function SignalDetail() {
         </div>
       </div>
 
-      {/* ── WAIT / REJECTION PANEL ── */}
+      {/* WAIT / REJECTION PANEL */}
       <WaitDecisionPanel
         direction={signal.direction}
         processVerdict={signal.processVerdict}
@@ -185,7 +236,7 @@ export default function SignalDetail() {
         logicAdmissibility={signal.logicAdmissibility}
       />
 
-      {/* ── TRADE PARAMETERS ── */}
+      {/* TRADE PARAMETERS */}
       <div className={cn("terminal-panel", isWait && "opacity-50")}>
         <div className="terminal-panel-header">
           <span>TRADE PARAMETERS</span>
@@ -235,10 +286,10 @@ export default function SignalDetail() {
         </div>
       </div>
 
-      {/* ── ROUTING ── */}
+      {/* ROUTING */}
       <RoutingPriorityPanel direction={signal.direction as string} processVerdict={signal.processVerdict as string | undefined} />
 
-      {/* ── THESIS + ASSESSMENT ── */}
+      {/* THESIS + ASSESSMENT */}
       {(signal.thesis || signal.whyTrade) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {signal.thesis && (
@@ -267,7 +318,7 @@ export default function SignalDetail() {
         </div>
       )}
 
-      {/* ── PRE-TRADE CHECKLIST ── */}
+      {/* PRE-TRADE CHECKLIST */}
       <div className="terminal-panel">
         <div className="terminal-panel-header">
           <span>PRE-TRADE CHECKLIST</span>
@@ -282,7 +333,7 @@ export default function SignalDetail() {
         </div>
       </div>
 
-      {/* ── MARKET EVIDENCE ── */}
+      {/* MARKET EVIDENCE */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
         {/* Market State */}
@@ -365,7 +416,10 @@ export default function SignalDetail() {
         <div className="terminal-panel">
           <div className="terminal-panel-header">
             <span>OPEN INTEREST</span>
-            {openInterestContext && <span className="text-foreground/60">{openInterestContext.dominantSide}</span>}
+            <span className="flex items-center gap-1.5">
+              {openInterestContext && <span className="text-foreground/60">{openInterestContext.dominantSide}</span>}
+              <span className="chip-warn text-[7px]">EST</span>
+            </span>
           </div>
           <div className="p-4">
             {openInterestContext ? (
@@ -405,20 +459,20 @@ export default function SignalDetail() {
         </div>
       </div>
 
-      {/* ── DATA QUALITY & PROVENANCE ── */}
+      {/* DATA QUALITY & PROVENANCE */}
       {signal.dataQuality && (
         <DataQualityPanel dataQuality={signal.dataQuality as Parameters<typeof DataQualityPanel>[0]["dataQuality"]} />
       )}
 
-      {/* ── PACKET VERIFICATION ── */}
+      {/* PACKET VERIFICATION */}
       {signal.verificationReport && (
         <VerificationPanel report={signal.verificationReport as unknown as Parameters<typeof VerificationPanel>[0]["report"]} />
       )}
 
-      {/* ── HERMES CONTEXT ── */}
+      {/* HERMES CONTEXT */}
       <HermesTargetFindingsPanel target={asset || ""} />
 
-      {/* ── OUTCOME TRACKING STUB ── */}
+      {/* OUTCOME TRACKING STUB */}
       <div className="terminal-panel border-dashed opacity-50">
         <div className="terminal-panel-header">
           <span>OUTCOME TRACKING</span>

@@ -1,22 +1,24 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useSearch } from "wouter";
 import { useGetAuditByAsset, getGetAuditByAssetQueryKey } from "@workspace/api-client-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
+import { ArrowLeft, ShieldOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-function AuditCheckChip({ result }: { result: string }) {
-  if (result === "PASS") return <span className="chip-pass">PASS</span>;
-  if (result === "FAIL") return <span className="chip-fail">FAIL</span>;
-  if (result === "WARN") return <span className="chip-warn">WARN</span>;
-  return <span className="chip-skip">SKIP</span>;
-}
+import { VerdictBadge } from "@/components/signal-process";
 
 export default function Audit() {
   const { asset } = useParams();
-  
-  const { data: audit, isLoading } = useGetAuditByAsset(asset || "", { 
-    query: { enabled: !!asset, queryKey: getGetAuditByAssetQueryKey(asset || "") } 
+  const searchString = useSearch();
+  const searchParams = new URLSearchParams(searchString);
+  const signalId = searchParams.get("signalId");
+
+  const queryParams = signalId ? { signalId: Number(signalId) } : undefined;
+
+  const { data: audit, isLoading } = useGetAuditByAsset(asset || "", queryParams, {
+    query: {
+      enabled: !!asset,
+      queryKey: getGetAuditByAssetQueryKey(asset || "", queryParams),
+    },
   });
 
   if (isLoading) {
@@ -30,11 +32,22 @@ export default function Audit() {
 
   if (!audit) {
     return (
-      <div className="text-center p-12">
-        <h2 className="text-2xl font-display mb-2">AUDIT NOT FOUND</h2>
-        <p className="text-muted-foreground font-mono text-sm uppercase">COULD NOT FIND AUDIT REPORT FOR {asset}</p>
-        <Link href="/" className="text-primary hover:underline mt-4 inline-block font-mono text-sm uppercase">RETURN TO DASHBOARD</Link>
-      </div>
+      <Empty className="max-w-md mx-auto mt-16 border-border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <ShieldOff className="w-5 h-5" />
+          </EmptyMedia>
+          <EmptyTitle className="font-mono text-sm uppercase tracking-widest">
+            AUDIT NOT FOUND
+          </EmptyTitle>
+          <EmptyDescription className="font-mono text-[10px] uppercase tracking-wider">
+            Could not find audit report for {asset}
+          </EmptyDescription>
+        </EmptyHeader>
+        <Link href="/" className="text-primary hover:underline font-mono text-xs uppercase tracking-wider">
+          RETURN TO DASHBOARD
+        </Link>
+      </Empty>
     );
   }
 
@@ -48,7 +61,7 @@ export default function Audit() {
                 <ArrowLeft className="w-4 h-4" />
               </div>
             </Link>
-            <h1 className="text-2xl font-display text-foreground">
+            <h1 className="text-2xl tracking-widest text-foreground">
               {asset} DJZS AUDIT
             </h1>
           </div>
@@ -56,22 +69,29 @@ export default function Audit() {
             DJZS PROTOCOL // RISK AUDIT
           </p>
         </div>
-        <div className="text-muted-foreground text-xs font-mono uppercase">
-          GENERATED: {new Date(audit.generatedAt).toLocaleString()}
+        <div className="flex items-center gap-3">
+          {signalId && (
+            <span className="font-mono text-[9px] text-muted-foreground/50 uppercase tracking-widest">
+              PINNED TO SIGNAL #{signalId}
+            </span>
+          )}
+          <span className="text-muted-foreground text-xs font-mono uppercase">
+            GENERATED: {new Date(audit.generatedAt).toLocaleString()}
+          </span>
         </div>
       </div>
 
-      <div className="border-l-[1px] bg-card" style={{ 
-        borderLeftColor: audit.verdict === "PASS" ? "var(--color-primary)" : 
-                        audit.verdict === "FAIL" ? "var(--color-destructive)" : 
-                        "hsl(var(--trade-wait))" 
+      <div className="border-l-[1px] bg-card" style={{
+        borderLeftColor: audit.verdict === "PASS" ? "var(--color-primary)" :
+                        audit.verdict === "FAIL" ? "var(--color-destructive)" :
+                        "hsl(var(--trade-wait))"
       }}>
         <div className="p-8 border border-l-0 border-border">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-8">
             <div>
-              <div className="text-xs font-mono text-muted-foreground mb-2 uppercase">FINAL VERDICT</div>
+              <div className="text-xs font-mono text-muted-foreground mb-2 uppercase">DJZS VERDICT</div>
               <div className={cn(
-                "text-[64px] leading-none font-bold font-display tracking-tight uppercase",
+                "text-[64px] leading-none font-bold font-mono tracking-tight uppercase",
                 audit.verdict === "PASS" ? "text-primary" :
                 audit.verdict === "FAIL" ? "text-destructive" :
                 "text-[hsl(var(--trade-wait))]"
@@ -81,10 +101,10 @@ export default function Audit() {
             </div>
             <div className="md:max-w-md">
               <div className="text-xs font-mono text-muted-foreground mb-2 uppercase">SUMMARY</div>
-              <div className="text-body leading-relaxed">{audit.summary}</div>
+              <div className="font-mono text-xs text-muted-foreground leading-relaxed">{audit.summary}</div>
             </div>
           </div>
-          
+
           <div className="border border-border bg-transparent overflow-hidden mt-8">
             <table className="w-full text-sm">
               <thead className="bg-secondary text-muted-foreground">
@@ -99,8 +119,8 @@ export default function Audit() {
                 {audit.checks?.map((check, i) => (
                   <tr key={i} className="hover:bg-card">
                     <td className="px-4 py-4 font-mono text-foreground uppercase">{check.name}</td>
-                    <td className="px-4 py-4"><AuditCheckChip result={check.result} /></td>
-                    <td className="px-4 py-4 text-body">{check.detail}</td>
+                    <td className="px-4 py-4"><VerdictBadge value={check.result} /></td>
+                    <td className="px-4 py-4 font-mono text-xs text-muted-foreground">{check.detail}</td>
                     <td className="px-4 py-4 text-right font-mono text-muted-foreground">{check.weight.toFixed(1)}</td>
                   </tr>
                 ))}

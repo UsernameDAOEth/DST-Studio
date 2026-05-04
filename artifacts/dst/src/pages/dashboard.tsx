@@ -1,18 +1,11 @@
 import { Link } from "wouter";
 import { useGetSignals, useGetMarketSnapshot, useGetSignalFeed } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, ShieldOff } from "lucide-react";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
+import { ArrowRight, ShieldOff, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ProcessVerdictBadge, SetupFamilyLabel } from "@/components/signal-process";
-
-function AuditChip({ verdict }: { verdict: string }) {
-  if (verdict === "PASS") return <span className="chip-pass"><span className="w-1.5 h-1.5 rounded-none bg-primary mr-1.5 inline-block"></span>PASS</span>;
-  if (verdict === "FAIL") return <span className="chip-fail"><span className="w-1.5 h-1.5 rounded-none bg-destructive mr-1.5 inline-block"></span>FAIL</span>;
-  if (verdict === "WARN") return <span className="chip-warn"><span className="w-1.5 h-1.5 rounded-none bg-[hsl(var(--trade-wait))] mr-1.5 inline-block"></span>WARN</span>;
-  return <span className="chip-skip">SKIP</span>;
-}
+import { ProcessVerdictBadge, SetupFamilyLabel, VerdictBadge } from "@/components/signal-process";
 
 function DirectionChip({ direction }: { direction: string }) {
   if (direction === "LONG") return <span className="chip-long">{direction}</span>;
@@ -61,7 +54,7 @@ function AssetCard({ asset }: { asset: string }) {
         {/* header row */}
         <div className="terminal-panel-header">
           <span className="text-foreground tracking-widest">{asset}</span>
-          <AuditChip verdict={signal.verdictDjzs} />
+          <VerdictBadge value={signal.verdictDjzs} />
         </div>
 
         <div className="p-4 space-y-3">
@@ -222,7 +215,7 @@ export default function Dashboard() {
                   <td className="px-4 py-2.5 font-mono text-foreground font-bold tracking-wider">{entry.asset}</td>
                   <td className="px-4 py-2.5"><DirectionChip direction={entry.direction} /></td>
                   <td className="px-4 py-2.5 font-mono text-muted-foreground mono-nums">{entry.confidence}%</td>
-                  <td className="px-4 py-2.5"><AuditChip verdict={entry.verdict} /></td>
+                  <td className="px-4 py-2.5"><VerdictBadge value={entry.verdict} /></td>
                   <td className="px-4 py-2.5"><ProcessVerdictBadge verdict={entry.processVerdict} /></td>
                   <td className="px-4 py-2.5 font-mono mono-nums">
                     {entry.rrRatio ? (
@@ -247,8 +240,20 @@ export default function Dashboard() {
             </tbody>
           </table>
           {!isLoadingFeed && feed?.length === 0 && (
-            <div className="p-8 text-center font-mono text-xs text-muted-foreground uppercase tracking-widest">
-              NO SIGNALS FOUND — TRIGGER A SCAN FROM HERMES
+            <div className="p-4">
+              <Empty className="border-border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Radio className="w-5 h-5" />
+                  </EmptyMedia>
+                  <EmptyTitle className="font-mono text-sm uppercase tracking-widest">
+                    NO SIGNALS
+                  </EmptyTitle>
+                  <EmptyDescription className="font-mono text-[10px] uppercase tracking-wider">
+                    Trigger a scan from Hermes to generate signals
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             </div>
           )}
         </div>

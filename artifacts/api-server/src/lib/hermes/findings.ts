@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db, hermesFindingsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
-import { randomUUID } from "crypto";
+import { eq, desc, and, gte } from "drizzle-orm";
+import { randomUUID, createHash } from "crypto";
 import type { HermesFinding } from "@workspace/db";
 
 export const EvidenceItemSchema = z.object({
@@ -93,13 +93,18 @@ function toPublic(f: HermesFinding): HermesFindingPublic {
   };
 }
 
+function contentHash(target: string, observationType: string, summary: string): string {
+  return createHash("sha256")
+    .update(`${target}:${observationType}:${summary}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
 export async function ingestFinding(
   payload: SubmitFindingPayload,
 ): Promise<{ finding: HermesFindingPublic; deduplicated: boolean }> {
   const findingId = payload.finding_id ?? randomUUID();
 
-  // Replay-safe: if finding_id already exists, return the existing record
-  // without inserting a duplicate (idempotent ingestion).
   const existing = findingId
     ? await db
         .select()
@@ -110,6 +115,27 @@ export async function ingestFinding(
 
   if (existing.length > 0) {
     return { finding: toPublic(existing[0]), deduplicated: true };
+  }
+
+  const hash = contentHash(payload.target, payload.observation_type, payload.summary);
+  const dedupWindow = new Date(Date.now() - 5 * 60 * 1000);
+  const contentDupe = await db
+    .select()
+    .from(hermesFindingsTable)
+    .where(
+      and(
+        eq(hermesFindingsTable.target, payload.target),
+        eq(hermesFindingsTable.observationType, payload.observation_type),
+        eq(hermesFindingsTable.contentHash, hash),
+        ...(payload.run_id
+          ? [eq(hermesFindingsTable.runId, payload.run_id)]
+          : [gte(hermesFindingsTable.createdAt, dedupWindow)]),
+      ),
+    )
+    .limit(1);
+
+  if (contentDupe.length > 0) {
+    return { finding: toPublic(contentDupe[0]), deduplicated: true };
   }
 
   const [inserted] = await db
@@ -127,6 +153,7 @@ export async function ingestFinding(
       suggestedFlags: payload.suggested_flags,
       status: "ACTIVE",
       expiresAt: payload.expires_at ? new Date(payload.expires_at) : null,
+      contentHash: hash,
     })
     .returning();
   return { finding: toPublic(inserted), deduplicated: false };
