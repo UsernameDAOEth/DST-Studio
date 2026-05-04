@@ -138,7 +138,7 @@ export async function ingestFinding(
     return { finding: toPublic(contentDupe[0]), deduplicated: true };
   }
 
-  const [inserted] = await db
+  const rows = await db
     .insert(hermesFindingsTable)
     .values({
       findingId,
@@ -155,8 +155,36 @@ export async function ingestFinding(
       expiresAt: payload.expires_at ? new Date(payload.expires_at) : null,
       contentHash: hash,
     })
+    .onConflictDoNothing({
+      target: [
+        hermesFindingsTable.target,
+        hermesFindingsTable.observationType,
+        hermesFindingsTable.contentHash,
+      ],
+    })
     .returning();
-  return { finding: toPublic(inserted), deduplicated: false };
+
+  if (rows.length === 0) {
+    const [existing] = await db
+      .select()
+      .from(hermesFindingsTable)
+      .where(
+        and(
+          eq(hermesFindingsTable.target, payload.target),
+          eq(hermesFindingsTable.observationType, payload.observation_type),
+          eq(hermesFindingsTable.contentHash, hash),
+        ),
+      )
+      .limit(1);
+    if (!existing) {
+      throw new Error(
+        `Conflict-path re-read failed: no row found for target=${payload.target}, type=${payload.observation_type}, hash=${hash}`,
+      );
+    }
+    return { finding: toPublic(existing), deduplicated: true };
+  }
+
+  return { finding: toPublic(rows[0]), deduplicated: false };
 }
 
 export async function getFindingsForTarget(

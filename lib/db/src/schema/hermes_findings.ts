@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,10 +15,16 @@ export const hermesFindingsTable = pgTable("hermes_findings", {
   confidence: numeric("confidence", { precision: 4, scale: 3 }).notNull().default("0"),
   suggestedFlags: jsonb("suggested_flags").notNull().$type<string[]>().default([]),
   status: text("status").notNull().default("ACTIVE"),
-  contentHash: text("content_hash"),
+  contentHash: text("content_hash").notNull(),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("uq_hermes_findings_content_hash").on(
+    table.target,
+    table.observationType,
+    table.contentHash,
+  ),
+]);
 
 export const insertHermesFindingSchema = createInsertSchema(hermesFindingsTable).omit({
   id: true,
