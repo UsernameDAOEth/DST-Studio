@@ -22,6 +22,19 @@ function verdictDotClass(value: string): string | null {
   return null;
 }
 
+export function verdictTextClass(value: string): string {
+  if (VERDICT_PASS.includes(value)) return "text-primary";
+  if (VERDICT_FAIL.includes(value)) return "text-destructive";
+  if (VERDICT_WARN.includes(value)) return "text-[hsl(var(--trade-wait))]";
+  return "text-muted-foreground";
+}
+
+export function verdictBorderColor(value: string): string {
+  if (VERDICT_PASS.includes(value)) return "var(--color-primary)";
+  if (VERDICT_FAIL.includes(value)) return "var(--color-destructive)";
+  return "hsl(var(--trade-wait))";
+}
+
 export function VerdictBadge({ value, size = "sm" }: { value?: string; size?: "sm" | "lg" }) {
   if (!value) return null;
   const chipClass = verdictChipClass(value);
@@ -99,7 +112,7 @@ const GRADE_TOOLTIPS: Record<string, string> = {
   B: "All hard rules met, moderate structural evidence",
   C: "Marginal — some rules met, reduced conviction",
   D: "Weak — multiple soft failures, significant risk of false signal",
-  F: "Hard execution rule failure — no admissible setup",
+  F: "F = one or more hard execution rules failed; no setup passed audit",
 };
 
 export function ProcessGradeBadge({ grade }: { grade?: string }) {
@@ -128,8 +141,8 @@ export function ProcessGradeBadge({ grade }: { grade?: string }) {
         </TooltipContent>
       </Tooltip>
       {grade === "F" && (
-        <span className="font-mono text-[9px] text-destructive/70 uppercase tracking-wider max-w-[120px] leading-tight">
-          HARD RULE FAILURE
+        <span className="font-mono text-[9px] text-destructive/70 uppercase tracking-wider max-w-[200px] leading-tight">
+          HARD RULE FAILURE — NO SETUP PASSED AUDIT
         </span>
       )}
     </div>

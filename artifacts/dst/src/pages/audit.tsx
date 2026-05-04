@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
 import { ArrowLeft, ShieldOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VerdictBadge } from "@/components/signal-process";
+import { VerdictBadge, verdictTextClass, verdictBorderColor } from "@/components/signal-process";
 
 export default function Audit() {
   const { asset } = useParams();
@@ -82,9 +82,7 @@ export default function Audit() {
       </div>
 
       <div className="border-l-[1px] bg-card" style={{
-        borderLeftColor: audit.verdict === "PASS" ? "var(--color-primary)" :
-                        audit.verdict === "FAIL" ? "var(--color-destructive)" :
-                        "hsl(var(--trade-wait))"
+        borderLeftColor: verdictBorderColor(audit.verdict || "")
       }}>
         <div className="p-8 border border-l-0 border-border">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-8">
@@ -92,9 +90,7 @@ export default function Audit() {
               <div className="text-xs font-mono text-muted-foreground mb-2 uppercase">DJZS VERDICT</div>
               <div className={cn(
                 "text-[64px] leading-none font-bold font-mono tracking-tight uppercase",
-                audit.verdict === "PASS" ? "text-primary" :
-                audit.verdict === "FAIL" ? "text-destructive" :
-                "text-[hsl(var(--trade-wait))]"
+                verdictTextClass(audit.verdict || "")
               )}>
                 {audit.verdict}
               </div>
