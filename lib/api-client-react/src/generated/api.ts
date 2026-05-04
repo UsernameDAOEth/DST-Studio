@@ -23,20 +23,26 @@ import type {
   Alert,
   AuditReport,
   CreateAlert,
+  CreateHermesRunRequest,
   CreateWatchlistEntry,
   GetHermesFindingsParams,
   GetHermesJobsParams,
   GetHermesMetricsParams,
+  GetHermesRunsParams,
   GetSignalFeedParams,
   GetSignalsParams,
   HealthStatus,
+  HermesBoard,
   HermesConstraints,
   HermesConstraintsUpdate,
   HermesEvaluation,
   HermesJob,
   HermesMetrics,
+  HermesRun,
   HermesScanResult,
   HermesScanStatus,
+  HermesTask,
+  HermesWorker,
   IntegrationStatus,
   MarketSnapshot,
   PythPriceData,
@@ -2048,6 +2054,508 @@ export function useGetHermesJobs<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetHermesJobsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get the Hermes Kanban runtime board with lanes, workers, and system health
+ */
+export const getGetHermesBoardUrl = () => {
+  return `/api/hermes/board`;
+};
+
+export const getHermesBoard = async (
+  options?: RequestInit,
+): Promise<HermesBoard> => {
+  return customFetch<HermesBoard>(getGetHermesBoardUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHermesBoardQueryKey = () => {
+  return [`/api/hermes/board`] as const;
+};
+
+export const getGetHermesBoardQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHermesBoard>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesBoard>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHermesBoardQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHermesBoard>>> = ({
+    signal,
+  }) => getHermesBoard({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesBoard>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHermesBoardQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHermesBoard>>
+>;
+export type GetHermesBoardQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the Hermes Kanban runtime board with lanes, workers, and system health
+ */
+
+export function useGetHermesBoard<
+  TData = Awaited<ReturnType<typeof getHermesBoard>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesBoard>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHermesBoardQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get recent Hermes scan runs
+ */
+export const getGetHermesRunsUrl = (params?: GetHermesRunsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/hermes/runs?${stringifiedParams}`
+    : `/api/hermes/runs`;
+};
+
+export const getHermesRuns = async (
+  params?: GetHermesRunsParams,
+  options?: RequestInit,
+): Promise<HermesRun[]> => {
+  return customFetch<HermesRun[]>(getGetHermesRunsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHermesRunsQueryKey = (params?: GetHermesRunsParams) => {
+  return [`/api/hermes/runs`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetHermesRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHermesRuns>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetHermesRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHermesRunsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHermesRuns>>> = ({
+    signal,
+  }) => getHermesRuns(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesRuns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHermesRunsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHermesRuns>>
+>;
+export type GetHermesRunsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recent Hermes scan runs
+ */
+
+export function useGetHermesRuns<
+  TData = Awaited<ReturnType<typeof getHermesRuns>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetHermesRunsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesRuns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHermesRunsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create and start a new Hermes scan run for a specific asset
+ */
+export const getCreateHermesRunUrl = () => {
+  return `/api/hermes/runs`;
+};
+
+export const createHermesRun = async (
+  createHermesRunRequest: CreateHermesRunRequest,
+  options?: RequestInit,
+): Promise<HermesRun> => {
+  return customFetch<HermesRun>(getCreateHermesRunUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createHermesRunRequest),
+  });
+};
+
+export const getCreateHermesRunMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHermesRun>>,
+    TError,
+    { data: BodyType<CreateHermesRunRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createHermesRun>>,
+  TError,
+  { data: BodyType<CreateHermesRunRequest> },
+  TContext
+> => {
+  const mutationKey = ["createHermesRun"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createHermesRun>>,
+    { data: BodyType<CreateHermesRunRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createHermesRun(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateHermesRunMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createHermesRun>>
+>;
+export type CreateHermesRunMutationBody = BodyType<CreateHermesRunRequest>;
+export type CreateHermesRunMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create and start a new Hermes scan run for a specific asset
+ */
+export const useCreateHermesRun = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHermesRun>>,
+    TError,
+    { data: BodyType<CreateHermesRunRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createHermesRun>>,
+  TError,
+  { data: BodyType<CreateHermesRunRequest> },
+  TContext
+> => {
+  return useMutation(getCreateHermesRunMutationOptions(options));
+};
+
+/**
+ * @summary Get a specific Hermes run with full task detail
+ */
+export const getGetHermesRunUrl = (runId: string) => {
+  return `/api/hermes/runs/${runId}`;
+};
+
+export const getHermesRun = async (
+  runId: string,
+  options?: RequestInit,
+): Promise<HermesRun> => {
+  return customFetch<HermesRun>(getGetHermesRunUrl(runId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHermesRunQueryKey = (runId: string) => {
+  return [`/api/hermes/runs/${runId}`] as const;
+};
+
+export const getGetHermesRunQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHermesRun>>,
+  TError = ErrorType<void>,
+>(
+  runId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesRun>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHermesRunQueryKey(runId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHermesRun>>> = ({
+    signal,
+  }) => getHermesRun(runId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!runId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesRun>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHermesRunQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHermesRun>>
+>;
+export type GetHermesRunQueryError = ErrorType<void>;
+
+/**
+ * @summary Get a specific Hermes run with full task detail
+ */
+
+export function useGetHermesRun<
+  TData = Awaited<ReturnType<typeof getHermesRun>>,
+  TError = ErrorType<void>,
+>(
+  runId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHermesRun>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHermesRunQueryOptions(runId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Retry a failed Hermes task
+ */
+export const getRetryHermesTaskUrl = (runId: string, taskId: string) => {
+  return `/api/hermes/runs/${runId}/tasks/${taskId}/retry`;
+};
+
+export const retryHermesTask = async (
+  runId: string,
+  taskId: string,
+  options?: RequestInit,
+): Promise<HermesTask> => {
+  return customFetch<HermesTask>(getRetryHermesTaskUrl(runId, taskId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRetryHermesTaskMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryHermesTask>>,
+    TError,
+    { runId: string; taskId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryHermesTask>>,
+  TError,
+  { runId: string; taskId: string },
+  TContext
+> => {
+  const mutationKey = ["retryHermesTask"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryHermesTask>>,
+    { runId: string; taskId: string }
+  > = (props) => {
+    const { runId, taskId } = props ?? {};
+
+    return retryHermesTask(runId, taskId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RetryHermesTaskMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryHermesTask>>
+>;
+
+export type RetryHermesTaskMutationError = ErrorType<void>;
+
+/**
+ * @summary Retry a failed Hermes task
+ */
+export const useRetryHermesTask = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryHermesTask>>,
+    TError,
+    { runId: string; taskId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof retryHermesTask>>,
+  TError,
+  { runId: string; taskId: string },
+  TContext
+> => {
+  return useMutation(getRetryHermesTaskMutationOptions(options));
+};
+
+/**
+ * @summary Get current Hermes worker statuses
+ */
+export const getGetHermesWorkersUrl = () => {
+  return `/api/hermes/workers`;
+};
+
+export const getHermesWorkers = async (
+  options?: RequestInit,
+): Promise<HermesWorker[]> => {
+  return customFetch<HermesWorker[]>(getGetHermesWorkersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHermesWorkersQueryKey = () => {
+  return [`/api/hermes/workers`] as const;
+};
+
+export const getGetHermesWorkersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHermesWorkers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesWorkers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHermesWorkersQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHermesWorkers>>
+  > = ({ signal }) => getHermesWorkers({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesWorkers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHermesWorkersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHermesWorkers>>
+>;
+export type GetHermesWorkersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get current Hermes worker statuses
+ */
+
+export function useGetHermesWorkers<
+  TData = Awaited<ReturnType<typeof getHermesWorkers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHermesWorkers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHermesWorkersQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

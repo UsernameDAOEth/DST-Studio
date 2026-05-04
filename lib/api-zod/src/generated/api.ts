@@ -1522,6 +1522,669 @@ export const GetHermesJobsResponseItem = zod
 export const GetHermesJobsResponse = zod.array(GetHermesJobsResponseItem);
 
 /**
+ * @summary Get the Hermes Kanban runtime board with lanes, workers, and system health
+ */
+export const GetHermesBoardResponse = zod
+  .object({
+    workers: zod.array(
+      zod
+        .object({
+          worker_id: zod.string(),
+          role: zod.enum([
+            "market-context-worker",
+            "price-verifier-worker",
+            "evidence-ingress-worker",
+            "alert-router-worker",
+          ]),
+          status: zod.enum(["IDLE", "BUSY", "ERROR"]),
+          current_task_id: zod.string().nullish(),
+          tasks_completed: zod.number(),
+          tasks_failed: zod.number(),
+          last_active_at: zod.coerce.date().nullish(),
+        })
+        .describe(
+          "A Hermes runtime worker with its current status and statistics",
+        ),
+    ),
+    runs: zod.array(
+      zod
+        .object({
+          run_id: zod.string(),
+          asset: zod.string(),
+          timeframe: zod.string(),
+          triggered_at: zod.coerce.date(),
+          completed_at: zod.coerce.date().nullish(),
+          overall_status: zod.enum(["RUNNING", "DONE", "FAILED", "BLOCKED"]),
+          tasks: zod.array(
+            zod
+              .object({
+                run_id: zod.string(),
+                task_id: zod.string(),
+                task_type: zod.enum([
+                  "SCAN_CREATE",
+                  "FETCH_MARKET_CONTEXT",
+                  "VERIFY_PRICE_STATE",
+                  "COLLECT_HERMES_FINDINGS",
+                  "COMPRESS_EVIDENCE",
+                  "ATTACH_TO_AUDIT",
+                  "ROUTE_RESULT",
+                ]),
+                asset: zod.string(),
+                timeframe: zod.string(),
+                status: zod.enum([
+                  "TRIAGE",
+                  "READY",
+                  "IN_PROGRESS",
+                  "BLOCKED",
+                  "DONE",
+                  "FAILED",
+                ]),
+                depends_on: zod
+                  .array(zod.string())
+                  .describe("task_ids this task depends on"),
+                worker_id: zod.string().nullish(),
+                started_at: zod.coerce.date().nullish(),
+                finished_at: zod.coerce.date().nullish(),
+                retry_count: zod.number(),
+                max_retries: zod.number(),
+                summary: zod
+                  .string()
+                  .nullish()
+                  .describe("Human-readable outcome description for this task"),
+                error_code: zod
+                  .string()
+                  .nullish()
+                  .describe("Machine-readable error code if FAILED"),
+                blocked_reason: zod
+                  .string()
+                  .nullish()
+                  .describe("Reason this task is in BLOCKED state"),
+              })
+              .describe(
+                "A single task in a Hermes scan run with full metadata and retry history",
+              ),
+          ),
+          djzs_verdict: zod
+            .string()
+            .nullish()
+            .describe(
+              "DJZS admissibility verdict (PASS\/FAIL) — set by ATTACH_TO_AUDIT task. Hermes does not compute this.",
+            ),
+          process_verdict: zod
+            .string()
+            .nullish()
+            .describe(
+              "Process quality verdict (APPROVED\/REJECTED\/DEGRADED) — from DJZS audit. Read-only.",
+            ),
+          direction: zod.string().nullish(),
+          rejection_codes: zod.array(zod.string()),
+        })
+        .describe(
+          "A complete Hermes scan run for one asset — tracks all tasks from triage to route",
+        ),
+    ),
+    lanes: zod.object({
+      triage: zod.array(
+        zod
+          .object({
+            run_id: zod.string(),
+            task_id: zod.string(),
+            task_type: zod.enum([
+              "SCAN_CREATE",
+              "FETCH_MARKET_CONTEXT",
+              "VERIFY_PRICE_STATE",
+              "COLLECT_HERMES_FINDINGS",
+              "COMPRESS_EVIDENCE",
+              "ATTACH_TO_AUDIT",
+              "ROUTE_RESULT",
+            ]),
+            asset: zod.string(),
+            timeframe: zod.string(),
+            status: zod.enum([
+              "TRIAGE",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DONE",
+              "FAILED",
+            ]),
+            depends_on: zod
+              .array(zod.string())
+              .describe("task_ids this task depends on"),
+            worker_id: zod.string().nullish(),
+            started_at: zod.coerce.date().nullish(),
+            finished_at: zod.coerce.date().nullish(),
+            retry_count: zod.number(),
+            max_retries: zod.number(),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Human-readable outcome description for this task"),
+            error_code: zod
+              .string()
+              .nullish()
+              .describe("Machine-readable error code if FAILED"),
+            blocked_reason: zod
+              .string()
+              .nullish()
+              .describe("Reason this task is in BLOCKED state"),
+          })
+          .describe(
+            "A single task in a Hermes scan run with full metadata and retry history",
+          ),
+      ),
+      ready: zod.array(
+        zod
+          .object({
+            run_id: zod.string(),
+            task_id: zod.string(),
+            task_type: zod.enum([
+              "SCAN_CREATE",
+              "FETCH_MARKET_CONTEXT",
+              "VERIFY_PRICE_STATE",
+              "COLLECT_HERMES_FINDINGS",
+              "COMPRESS_EVIDENCE",
+              "ATTACH_TO_AUDIT",
+              "ROUTE_RESULT",
+            ]),
+            asset: zod.string(),
+            timeframe: zod.string(),
+            status: zod.enum([
+              "TRIAGE",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DONE",
+              "FAILED",
+            ]),
+            depends_on: zod
+              .array(zod.string())
+              .describe("task_ids this task depends on"),
+            worker_id: zod.string().nullish(),
+            started_at: zod.coerce.date().nullish(),
+            finished_at: zod.coerce.date().nullish(),
+            retry_count: zod.number(),
+            max_retries: zod.number(),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Human-readable outcome description for this task"),
+            error_code: zod
+              .string()
+              .nullish()
+              .describe("Machine-readable error code if FAILED"),
+            blocked_reason: zod
+              .string()
+              .nullish()
+              .describe("Reason this task is in BLOCKED state"),
+          })
+          .describe(
+            "A single task in a Hermes scan run with full metadata and retry history",
+          ),
+      ),
+      in_progress: zod.array(
+        zod
+          .object({
+            run_id: zod.string(),
+            task_id: zod.string(),
+            task_type: zod.enum([
+              "SCAN_CREATE",
+              "FETCH_MARKET_CONTEXT",
+              "VERIFY_PRICE_STATE",
+              "COLLECT_HERMES_FINDINGS",
+              "COMPRESS_EVIDENCE",
+              "ATTACH_TO_AUDIT",
+              "ROUTE_RESULT",
+            ]),
+            asset: zod.string(),
+            timeframe: zod.string(),
+            status: zod.enum([
+              "TRIAGE",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DONE",
+              "FAILED",
+            ]),
+            depends_on: zod
+              .array(zod.string())
+              .describe("task_ids this task depends on"),
+            worker_id: zod.string().nullish(),
+            started_at: zod.coerce.date().nullish(),
+            finished_at: zod.coerce.date().nullish(),
+            retry_count: zod.number(),
+            max_retries: zod.number(),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Human-readable outcome description for this task"),
+            error_code: zod
+              .string()
+              .nullish()
+              .describe("Machine-readable error code if FAILED"),
+            blocked_reason: zod
+              .string()
+              .nullish()
+              .describe("Reason this task is in BLOCKED state"),
+          })
+          .describe(
+            "A single task in a Hermes scan run with full metadata and retry history",
+          ),
+      ),
+      blocked: zod.array(
+        zod
+          .object({
+            run_id: zod.string(),
+            task_id: zod.string(),
+            task_type: zod.enum([
+              "SCAN_CREATE",
+              "FETCH_MARKET_CONTEXT",
+              "VERIFY_PRICE_STATE",
+              "COLLECT_HERMES_FINDINGS",
+              "COMPRESS_EVIDENCE",
+              "ATTACH_TO_AUDIT",
+              "ROUTE_RESULT",
+            ]),
+            asset: zod.string(),
+            timeframe: zod.string(),
+            status: zod.enum([
+              "TRIAGE",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DONE",
+              "FAILED",
+            ]),
+            depends_on: zod
+              .array(zod.string())
+              .describe("task_ids this task depends on"),
+            worker_id: zod.string().nullish(),
+            started_at: zod.coerce.date().nullish(),
+            finished_at: zod.coerce.date().nullish(),
+            retry_count: zod.number(),
+            max_retries: zod.number(),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Human-readable outcome description for this task"),
+            error_code: zod
+              .string()
+              .nullish()
+              .describe("Machine-readable error code if FAILED"),
+            blocked_reason: zod
+              .string()
+              .nullish()
+              .describe("Reason this task is in BLOCKED state"),
+          })
+          .describe(
+            "A single task in a Hermes scan run with full metadata and retry history",
+          ),
+      ),
+      done: zod.array(
+        zod
+          .object({
+            run_id: zod.string(),
+            task_id: zod.string(),
+            task_type: zod.enum([
+              "SCAN_CREATE",
+              "FETCH_MARKET_CONTEXT",
+              "VERIFY_PRICE_STATE",
+              "COLLECT_HERMES_FINDINGS",
+              "COMPRESS_EVIDENCE",
+              "ATTACH_TO_AUDIT",
+              "ROUTE_RESULT",
+            ]),
+            asset: zod.string(),
+            timeframe: zod.string(),
+            status: zod.enum([
+              "TRIAGE",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DONE",
+              "FAILED",
+            ]),
+            depends_on: zod
+              .array(zod.string())
+              .describe("task_ids this task depends on"),
+            worker_id: zod.string().nullish(),
+            started_at: zod.coerce.date().nullish(),
+            finished_at: zod.coerce.date().nullish(),
+            retry_count: zod.number(),
+            max_retries: zod.number(),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Human-readable outcome description for this task"),
+            error_code: zod
+              .string()
+              .nullish()
+              .describe("Machine-readable error code if FAILED"),
+            blocked_reason: zod
+              .string()
+              .nullish()
+              .describe("Reason this task is in BLOCKED state"),
+          })
+          .describe(
+            "A single task in a Hermes scan run with full metadata and retry history",
+          ),
+      ),
+      failed: zod.array(
+        zod
+          .object({
+            run_id: zod.string(),
+            task_id: zod.string(),
+            task_type: zod.enum([
+              "SCAN_CREATE",
+              "FETCH_MARKET_CONTEXT",
+              "VERIFY_PRICE_STATE",
+              "COLLECT_HERMES_FINDINGS",
+              "COMPRESS_EVIDENCE",
+              "ATTACH_TO_AUDIT",
+              "ROUTE_RESULT",
+            ]),
+            asset: zod.string(),
+            timeframe: zod.string(),
+            status: zod.enum([
+              "TRIAGE",
+              "READY",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "DONE",
+              "FAILED",
+            ]),
+            depends_on: zod
+              .array(zod.string())
+              .describe("task_ids this task depends on"),
+            worker_id: zod.string().nullish(),
+            started_at: zod.coerce.date().nullish(),
+            finished_at: zod.coerce.date().nullish(),
+            retry_count: zod.number(),
+            max_retries: zod.number(),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Human-readable outcome description for this task"),
+            error_code: zod
+              .string()
+              .nullish()
+              .describe("Machine-readable error code if FAILED"),
+            blocked_reason: zod
+              .string()
+              .nullish()
+              .describe("Reason this task is in BLOCKED state"),
+          })
+          .describe(
+            "A single task in a Hermes scan run with full metadata and retry history",
+          ),
+      ),
+    }),
+    system_health: zod.object({
+      total_runs_today: zod.number(),
+      failed_tasks_today: zod.number(),
+      blocked_tasks: zod.number(),
+      worker_errors: zod.number(),
+    }),
+  })
+  .describe(
+    "Hermes Kanban runtime board — workflow coordination surface. Not a scoring or verdict authority.",
+  );
+
+/**
+ * @summary Get recent Hermes scan runs
+ */
+export const getHermesRunsQueryLimitDefault = 20;
+
+export const GetHermesRunsQueryParams = zod.object({
+  limit: zod.coerce.number().default(getHermesRunsQueryLimitDefault),
+});
+
+export const GetHermesRunsResponseItem = zod
+  .object({
+    run_id: zod.string(),
+    asset: zod.string(),
+    timeframe: zod.string(),
+    triggered_at: zod.coerce.date(),
+    completed_at: zod.coerce.date().nullish(),
+    overall_status: zod.enum(["RUNNING", "DONE", "FAILED", "BLOCKED"]),
+    tasks: zod.array(
+      zod
+        .object({
+          run_id: zod.string(),
+          task_id: zod.string(),
+          task_type: zod.enum([
+            "SCAN_CREATE",
+            "FETCH_MARKET_CONTEXT",
+            "VERIFY_PRICE_STATE",
+            "COLLECT_HERMES_FINDINGS",
+            "COMPRESS_EVIDENCE",
+            "ATTACH_TO_AUDIT",
+            "ROUTE_RESULT",
+          ]),
+          asset: zod.string(),
+          timeframe: zod.string(),
+          status: zod.enum([
+            "TRIAGE",
+            "READY",
+            "IN_PROGRESS",
+            "BLOCKED",
+            "DONE",
+            "FAILED",
+          ]),
+          depends_on: zod
+            .array(zod.string())
+            .describe("task_ids this task depends on"),
+          worker_id: zod.string().nullish(),
+          started_at: zod.coerce.date().nullish(),
+          finished_at: zod.coerce.date().nullish(),
+          retry_count: zod.number(),
+          max_retries: zod.number(),
+          summary: zod
+            .string()
+            .nullish()
+            .describe("Human-readable outcome description for this task"),
+          error_code: zod
+            .string()
+            .nullish()
+            .describe("Machine-readable error code if FAILED"),
+          blocked_reason: zod
+            .string()
+            .nullish()
+            .describe("Reason this task is in BLOCKED state"),
+        })
+        .describe(
+          "A single task in a Hermes scan run with full metadata and retry history",
+        ),
+    ),
+    djzs_verdict: zod
+      .string()
+      .nullish()
+      .describe(
+        "DJZS admissibility verdict (PASS\/FAIL) — set by ATTACH_TO_AUDIT task. Hermes does not compute this.",
+      ),
+    process_verdict: zod
+      .string()
+      .nullish()
+      .describe(
+        "Process quality verdict (APPROVED\/REJECTED\/DEGRADED) — from DJZS audit. Read-only.",
+      ),
+    direction: zod.string().nullish(),
+    rejection_codes: zod.array(zod.string()),
+  })
+  .describe(
+    "A complete Hermes scan run for one asset — tracks all tasks from triage to route",
+  );
+export const GetHermesRunsResponse = zod.array(GetHermesRunsResponseItem);
+
+/**
+ * @summary Create and start a new Hermes scan run for a specific asset
+ */
+export const CreateHermesRunBody = zod.object({
+  asset: zod.string(),
+  timeframe: zod.enum(["1H", "4H", "1D"]),
+});
+
+/**
+ * @summary Get a specific Hermes run with full task detail
+ */
+export const GetHermesRunParams = zod.object({
+  runId: zod.coerce.string(),
+});
+
+export const GetHermesRunResponse = zod
+  .object({
+    run_id: zod.string(),
+    asset: zod.string(),
+    timeframe: zod.string(),
+    triggered_at: zod.coerce.date(),
+    completed_at: zod.coerce.date().nullish(),
+    overall_status: zod.enum(["RUNNING", "DONE", "FAILED", "BLOCKED"]),
+    tasks: zod.array(
+      zod
+        .object({
+          run_id: zod.string(),
+          task_id: zod.string(),
+          task_type: zod.enum([
+            "SCAN_CREATE",
+            "FETCH_MARKET_CONTEXT",
+            "VERIFY_PRICE_STATE",
+            "COLLECT_HERMES_FINDINGS",
+            "COMPRESS_EVIDENCE",
+            "ATTACH_TO_AUDIT",
+            "ROUTE_RESULT",
+          ]),
+          asset: zod.string(),
+          timeframe: zod.string(),
+          status: zod.enum([
+            "TRIAGE",
+            "READY",
+            "IN_PROGRESS",
+            "BLOCKED",
+            "DONE",
+            "FAILED",
+          ]),
+          depends_on: zod
+            .array(zod.string())
+            .describe("task_ids this task depends on"),
+          worker_id: zod.string().nullish(),
+          started_at: zod.coerce.date().nullish(),
+          finished_at: zod.coerce.date().nullish(),
+          retry_count: zod.number(),
+          max_retries: zod.number(),
+          summary: zod
+            .string()
+            .nullish()
+            .describe("Human-readable outcome description for this task"),
+          error_code: zod
+            .string()
+            .nullish()
+            .describe("Machine-readable error code if FAILED"),
+          blocked_reason: zod
+            .string()
+            .nullish()
+            .describe("Reason this task is in BLOCKED state"),
+        })
+        .describe(
+          "A single task in a Hermes scan run with full metadata and retry history",
+        ),
+    ),
+    djzs_verdict: zod
+      .string()
+      .nullish()
+      .describe(
+        "DJZS admissibility verdict (PASS\/FAIL) — set by ATTACH_TO_AUDIT task. Hermes does not compute this.",
+      ),
+    process_verdict: zod
+      .string()
+      .nullish()
+      .describe(
+        "Process quality verdict (APPROVED\/REJECTED\/DEGRADED) — from DJZS audit. Read-only.",
+      ),
+    direction: zod.string().nullish(),
+    rejection_codes: zod.array(zod.string()),
+  })
+  .describe(
+    "A complete Hermes scan run for one asset — tracks all tasks from triage to route",
+  );
+
+/**
+ * @summary Retry a failed Hermes task
+ */
+export const RetryHermesTaskParams = zod.object({
+  runId: zod.coerce.string(),
+  taskId: zod.coerce.string(),
+});
+
+export const RetryHermesTaskResponse = zod
+  .object({
+    run_id: zod.string(),
+    task_id: zod.string(),
+    task_type: zod.enum([
+      "SCAN_CREATE",
+      "FETCH_MARKET_CONTEXT",
+      "VERIFY_PRICE_STATE",
+      "COLLECT_HERMES_FINDINGS",
+      "COMPRESS_EVIDENCE",
+      "ATTACH_TO_AUDIT",
+      "ROUTE_RESULT",
+    ]),
+    asset: zod.string(),
+    timeframe: zod.string(),
+    status: zod.enum([
+      "TRIAGE",
+      "READY",
+      "IN_PROGRESS",
+      "BLOCKED",
+      "DONE",
+      "FAILED",
+    ]),
+    depends_on: zod
+      .array(zod.string())
+      .describe("task_ids this task depends on"),
+    worker_id: zod.string().nullish(),
+    started_at: zod.coerce.date().nullish(),
+    finished_at: zod.coerce.date().nullish(),
+    retry_count: zod.number(),
+    max_retries: zod.number(),
+    summary: zod
+      .string()
+      .nullish()
+      .describe("Human-readable outcome description for this task"),
+    error_code: zod
+      .string()
+      .nullish()
+      .describe("Machine-readable error code if FAILED"),
+    blocked_reason: zod
+      .string()
+      .nullish()
+      .describe("Reason this task is in BLOCKED state"),
+  })
+  .describe(
+    "A single task in a Hermes scan run with full metadata and retry history",
+  );
+
+/**
+ * @summary Get current Hermes worker statuses
+ */
+export const GetHermesWorkersResponseItem = zod
+  .object({
+    worker_id: zod.string(),
+    role: zod.enum([
+      "market-context-worker",
+      "price-verifier-worker",
+      "evidence-ingress-worker",
+      "alert-router-worker",
+    ]),
+    status: zod.enum(["IDLE", "BUSY", "ERROR"]),
+    current_task_id: zod.string().nullish(),
+    tasks_completed: zod.number(),
+    tasks_failed: zod.number(),
+    last_active_at: zod.coerce.date().nullish(),
+  })
+  .describe("A Hermes runtime worker with its current status and statistics");
+export const GetHermesWorkersResponse = zod.array(GetHermesWorkersResponseItem);
+
+/**
  * Protected ingress endpoint for Hermes agent findings. Hermes submits structured observations only — confidence is metadata, suggested flags are hints, not verdicts. DJZS remains the sole deterministic audit gate. Findings are stored and optionally attached to trade packets as read-only context. Hermes never approves, rejects, scores, or overrides DJZS.
 
  * @summary Submit a structured Hermes monitoring finding (evidence ingress)

@@ -10,6 +10,15 @@ import {
   SubmitFindingSchema,
   BOUNDARY_REMINDER,
 } from "../lib/hermes/findings";
+import {
+  createRun,
+  executeRun,
+  getBoard,
+  getRun,
+  getRecentRuns,
+  getWorkers,
+  retryTask,
+} from "../lib/hermes/board";
 import { GetHermesMetricsQueryParams } from "@workspace/api-zod";
 
 const router = Router();
@@ -44,6 +53,44 @@ router.get("/evaluation", async (_, res) => {
 router.get("/jobs", async (req, res) => {
   const limit = Number(req.query.limit) || 20;
   res.json(getRecentJobs(limit));
+});
+
+// ── BOARD ENDPOINTS ──────────────────────────────────────────────────────────
+
+router.get("/board", (_, res) => {
+  res.json(getBoard());
+});
+
+router.get("/runs", (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 50);
+  res.json(getRecentRuns(limit));
+});
+
+router.post("/runs", async (req, res) => {
+  const { asset, timeframe } = req.body as { asset?: string; timeframe?: string };
+  if (!asset || !timeframe) {
+    res.status(400).json({ error: "asset and timeframe are required" });
+    return;
+  }
+  const run = createRun(asset.toUpperCase(), timeframe);
+  res.status(201).json(run);
+  void executeRun(run.run_id);
+});
+
+router.get("/runs/:runId", (req, res) => {
+  const run = getRun(req.params.runId);
+  if (!run) { res.status(404).json({ error: "Run not found" }); return; }
+  res.json(run);
+});
+
+router.post("/runs/:runId/tasks/:taskId/retry", async (req, res) => {
+  const task = await retryTask(req.params.runId, req.params.taskId);
+  if (!task) { res.status(404).json({ error: "Run or task not found, or task not in FAILED state" }); return; }
+  res.json(task);
+});
+
+router.get("/workers", (_, res) => {
+  res.json(getWorkers());
 });
 
 router.post("/findings", async (req, res) => {

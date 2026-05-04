@@ -1068,6 +1068,157 @@ export interface HermesScanResult {
   message: string;
 }
 
+export type HermesTaskType =
+  (typeof HermesTaskType)[keyof typeof HermesTaskType];
+
+export const HermesTaskType = {
+  SCAN_CREATE: "SCAN_CREATE",
+  FETCH_MARKET_CONTEXT: "FETCH_MARKET_CONTEXT",
+  VERIFY_PRICE_STATE: "VERIFY_PRICE_STATE",
+  COLLECT_HERMES_FINDINGS: "COLLECT_HERMES_FINDINGS",
+  COMPRESS_EVIDENCE: "COMPRESS_EVIDENCE",
+  ATTACH_TO_AUDIT: "ATTACH_TO_AUDIT",
+  ROUTE_RESULT: "ROUTE_RESULT",
+} as const;
+
+export type HermesTaskStatus =
+  (typeof HermesTaskStatus)[keyof typeof HermesTaskStatus];
+
+export const HermesTaskStatus = {
+  TRIAGE: "TRIAGE",
+  READY: "READY",
+  IN_PROGRESS: "IN_PROGRESS",
+  BLOCKED: "BLOCKED",
+  DONE: "DONE",
+  FAILED: "FAILED",
+} as const;
+
+export type HermesWorkerRole =
+  (typeof HermesWorkerRole)[keyof typeof HermesWorkerRole];
+
+export const HermesWorkerRole = {
+  "market-context-worker": "market-context-worker",
+  "price-verifier-worker": "price-verifier-worker",
+  "evidence-ingress-worker": "evidence-ingress-worker",
+  "alert-router-worker": "alert-router-worker",
+} as const;
+
+export type HermesWorkerStatus =
+  (typeof HermesWorkerStatus)[keyof typeof HermesWorkerStatus];
+
+export const HermesWorkerStatus = {
+  IDLE: "IDLE",
+  BUSY: "BUSY",
+  ERROR: "ERROR",
+} as const;
+
+/**
+ * A single task in a Hermes scan run with full metadata and retry history
+ */
+export interface HermesTask {
+  run_id: string;
+  task_id: string;
+  task_type: HermesTaskType;
+  asset: string;
+  timeframe: string;
+  status: HermesTaskStatus;
+  /** task_ids this task depends on */
+  depends_on: string[];
+  worker_id?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  retry_count: number;
+  max_retries: number;
+  /** Human-readable outcome description for this task */
+  summary?: string | null;
+  /** Machine-readable error code if FAILED */
+  error_code?: string | null;
+  /** Reason this task is in BLOCKED state */
+  blocked_reason?: string | null;
+}
+
+/**
+ * A Hermes runtime worker with its current status and statistics
+ */
+export interface HermesWorker {
+  worker_id: string;
+  role: HermesWorkerRole;
+  status: HermesWorkerStatus;
+  current_task_id?: string | null;
+  tasks_completed: number;
+  tasks_failed: number;
+  last_active_at?: string | null;
+}
+
+export type HermesRunOverallStatus =
+  (typeof HermesRunOverallStatus)[keyof typeof HermesRunOverallStatus];
+
+export const HermesRunOverallStatus = {
+  RUNNING: "RUNNING",
+  DONE: "DONE",
+  FAILED: "FAILED",
+  BLOCKED: "BLOCKED",
+} as const;
+
+/**
+ * A complete Hermes scan run for one asset — tracks all tasks from triage to route
+ */
+export interface HermesRun {
+  run_id: string;
+  asset: string;
+  timeframe: string;
+  triggered_at: string;
+  completed_at?: string | null;
+  overall_status: HermesRunOverallStatus;
+  tasks: HermesTask[];
+  /** DJZS admissibility verdict (PASS/FAIL) — set by ATTACH_TO_AUDIT task. Hermes does not compute this. */
+  djzs_verdict?: string | null;
+  /** Process quality verdict (APPROVED/REJECTED/DEGRADED) — from DJZS audit. Read-only. */
+  process_verdict?: string | null;
+  direction?: string | null;
+  rejection_codes: string[];
+}
+
+export interface HermesBoardLanes {
+  triage: HermesTask[];
+  ready: HermesTask[];
+  in_progress: HermesTask[];
+  blocked: HermesTask[];
+  done: HermesTask[];
+  failed: HermesTask[];
+}
+
+export interface HermesBoardSystemHealth {
+  total_runs_today: number;
+  failed_tasks_today: number;
+  blocked_tasks: number;
+  worker_errors: number;
+}
+
+/**
+ * Hermes Kanban runtime board — workflow coordination surface. Not a scoring or verdict authority.
+ */
+export interface HermesBoard {
+  workers: HermesWorker[];
+  runs: HermesRun[];
+  lanes: HermesBoardLanes;
+  system_health: HermesBoardSystemHealth;
+}
+
+export type CreateHermesRunRequestTimeframe =
+  (typeof CreateHermesRunRequestTimeframe)[keyof typeof CreateHermesRunRequestTimeframe];
+
+export const CreateHermesRunRequestTimeframe = {
+  "1H": "1H",
+  "4H": "4H",
+  "1D": "1D",
+} as const;
+
+export interface CreateHermesRunRequest {
+  asset: string;
+  timeframe: CreateHermesRunRequestTimeframe;
+}
+
 export type HermesMetricsPeriod =
   (typeof HermesMetricsPeriod)[keyof typeof HermesMetricsPeriod];
 
@@ -1294,6 +1445,10 @@ export const GetHermesMetricsPeriod = {
 } as const;
 
 export type GetHermesJobsParams = {
+  limit?: number;
+};
+
+export type GetHermesRunsParams = {
   limit?: number;
 };
 

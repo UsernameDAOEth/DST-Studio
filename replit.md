@@ -54,6 +54,15 @@ DST is an **audit-first signal system** — a deterministic pre-trade audit laye
 - `evaluation.ts` — weekly policy evaluation report with per-parameter recommendations (KEEP/TIGHTEN/LOOSEN/REVIEW)
 - `findings.ts` — evidence ingress: SubmitFindingSchema (Zod), ingestFinding(), getFindingsForTarget(), getRecentFindings(), adaptFindingsToAuditContext(), BOUNDARY_REMINDER constant
 - `types.ts` — local type definitions (HermesConstraints, HermesJob, HermesMetrics, HermesEvaluation, PythPriceData, EvalReviewItem)
+- `board.ts` — Hermes Kanban runtime board (in-memory, max 50 runs). Task chain: SCAN_CREATE → FETCH_MARKET_CONTEXT → VERIFY_PRICE_STATE → COLLECT_HERMES_FINDINGS → COMPRESS_EVIDENCE → ATTACH_TO_AUDIT → ROUTE_RESULT. Workers: mcw-1 (market-context), pvw-1 (price-verifier), eiw-1 (evidence-ingress), arw-1 (alert-router). Task statuses: TRIAGE, READY, IN_PROGRESS, BLOCKED, DONE, FAILED. Blocked-state propagation on failure. Retry support (up to max_retries per task type). DJZS verdict read-only from ATTACH_TO_AUDIT — board has no audit authority.
+
+### Hermes Kanban Board — Operations Console (Phase 3 extension)
+Authority boundary: Kanban coordinates workflow and evidence movement only. Workers gather and hand off evidence. DJZS at ATTACH_TO_AUDIT is deterministic — board cannot influence, score, or override verdicts.
+- **Frontend**: `artifacts/dst/src/components/hermes-board.tsx` — operations console with worker chips, system health, 6-lane kanban (TRIAGE/READY/IN_PROGRESS/BLOCKED/DONE/FAILED), recent runs list, run detail panel with DJZS verdict summary, retry controls. Polls board every 2.5s.
+- **Hermes page tabs**: OPERATIONS BOARD (default) | RUNTIME CONFIG — tab switcher at `/hermes`
+- **API routes**: `GET /api/hermes/board`, `GET/POST /api/hermes/runs`, `GET /api/hermes/runs/:runId`, `POST /api/hermes/runs/:runId/tasks/:taskId/retry`, `GET /api/hermes/workers`
+- **Task dependency chain**: FETCH_MARKET_CONTEXT, VERIFY_PRICE_STATE, COLLECT_HERMES_FINDINGS run in parallel after SCAN_CREATE; COMPRESS_EVIDENCE waits for all three; ATTACH_TO_AUDIT waits for COMPRESS; ROUTE_RESULT waits for ATTACH.
+- **Blocked state**: When a task fails and exceeds max_retries, all downstream tasks enter BLOCKED status with explicit blocked_reason. Retry re-queues task and clears blocked downstream.
 
 ### Hermes Findings Ingress — Phase 3 Architecture
 Boundary doctrine is enforced at every layer:

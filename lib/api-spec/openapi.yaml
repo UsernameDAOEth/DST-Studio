@@ -441,6 +441,121 @@ paths:
                 items:
                   $ref: "#/components/schemas/HermesJob"
 
+  /hermes/board:
+    get:
+      operationId: getHermesBoard
+      tags: [hermes]
+      summary: Get the Hermes Kanban runtime board with lanes, workers, and system health
+      responses:
+        "200":
+          description: Hermes board state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesBoard"
+
+  /hermes/runs:
+    get:
+      operationId: getHermesRuns
+      tags: [hermes]
+      summary: Get recent Hermes scan runs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Recent runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HermesRun"
+    post:
+      operationId: createHermesRun
+      tags: [hermes]
+      summary: Create and start a new Hermes scan run for a specific asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHermesRunRequest"
+      responses:
+        "201":
+          description: Run created and started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesRun"
+
+  /hermes/runs/{runId}:
+    get:
+      operationId: getHermesRun
+      tags: [hermes]
+      summary: Get a specific Hermes run with full task detail
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Run detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesRun"
+        "404":
+          description: Run not found
+
+  /hermes/runs/{runId}/tasks/{taskId}/retry:
+    post:
+      operationId: retryHermesTask
+      tags: [hermes]
+      summary: Retry a failed Hermes task
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task queued for retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesTask"
+        "404":
+          description: Run or task not found
+        "400":
+          description: Task not in a retryable state
+
+  /hermes/workers:
+    get:
+      operationId: getHermesWorkers
+      tags: [hermes]
+      summary: Get current Hermes worker statuses
+      responses:
+        "200":
+          description: Workers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HermesWorker"
+
   /hermes/findings:
     post:
       operationId: submitHermesFinding
@@ -1349,6 +1464,243 @@ components:
         - assets
         - jobIds
         - message
+
+    HermesTaskType:
+      type: string
+      enum: [SCAN_CREATE, FETCH_MARKET_CONTEXT, VERIFY_PRICE_STATE, COLLECT_HERMES_FINDINGS, COMPRESS_EVIDENCE, ATTACH_TO_AUDIT, ROUTE_RESULT]
+
+    HermesTaskStatus:
+      type: string
+      enum: [TRIAGE, READY, IN_PROGRESS, BLOCKED, DONE, FAILED]
+
+    HermesWorkerRole:
+      type: string
+      enum: [market-context-worker, price-verifier-worker, evidence-ingress-worker, alert-router-worker]
+
+    HermesWorkerStatus:
+      type: string
+      enum: [IDLE, BUSY, ERROR]
+
+    HermesTask:
+      type: object
+      description: A single task in a Hermes scan run with full metadata and retry history
+      properties:
+        run_id:
+          type: string
+        task_id:
+          type: string
+        task_type:
+          $ref: "#/components/schemas/HermesTaskType"
+        asset:
+          type: string
+        timeframe:
+          type: string
+        status:
+          $ref: "#/components/schemas/HermesTaskStatus"
+        depends_on:
+          type: array
+          items:
+            type: string
+          description: task_ids this task depends on
+        worker_id:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        retry_count:
+          type: integer
+        max_retries:
+          type: integer
+        summary:
+          type: string
+          nullable: true
+          description: Human-readable outcome description for this task
+        error_code:
+          type: string
+          nullable: true
+          description: Machine-readable error code if FAILED
+        blocked_reason:
+          type: string
+          nullable: true
+          description: Reason this task is in BLOCKED state
+      required:
+        - run_id
+        - task_id
+        - task_type
+        - asset
+        - timeframe
+        - status
+        - depends_on
+        - retry_count
+        - max_retries
+
+    HermesWorker:
+      type: object
+      description: A Hermes runtime worker with its current status and statistics
+      properties:
+        worker_id:
+          type: string
+        role:
+          $ref: "#/components/schemas/HermesWorkerRole"
+        status:
+          $ref: "#/components/schemas/HermesWorkerStatus"
+        current_task_id:
+          type: string
+          nullable: true
+        tasks_completed:
+          type: integer
+        tasks_failed:
+          type: integer
+        last_active_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - worker_id
+        - role
+        - status
+        - tasks_completed
+        - tasks_failed
+
+    HermesRun:
+      type: object
+      description: A complete Hermes scan run for one asset — tracks all tasks from triage to route
+      properties:
+        run_id:
+          type: string
+        asset:
+          type: string
+        timeframe:
+          type: string
+        triggered_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        overall_status:
+          type: string
+          enum: [RUNNING, DONE, FAILED, BLOCKED]
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesTask"
+        djzs_verdict:
+          type: string
+          nullable: true
+          description: DJZS admissibility verdict (PASS/FAIL) — set by ATTACH_TO_AUDIT task. Hermes does not compute this.
+        process_verdict:
+          type: string
+          nullable: true
+          description: Process quality verdict (APPROVED/REJECTED/DEGRADED) — from DJZS audit. Read-only.
+        direction:
+          type: string
+          nullable: true
+        rejection_codes:
+          type: array
+          items:
+            type: string
+      required:
+        - run_id
+        - asset
+        - timeframe
+        - triggered_at
+        - overall_status
+        - tasks
+        - rejection_codes
+
+    HermesBoardLanes:
+      type: object
+      properties:
+        triage:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesTask"
+        ready:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesTask"
+        in_progress:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesTask"
+        blocked:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesTask"
+        done:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesTask"
+        failed:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesTask"
+      required:
+        - triage
+        - ready
+        - in_progress
+        - blocked
+        - done
+        - failed
+
+    HermesBoardSystemHealth:
+      type: object
+      properties:
+        total_runs_today:
+          type: integer
+        failed_tasks_today:
+          type: integer
+        blocked_tasks:
+          type: integer
+        worker_errors:
+          type: integer
+      required:
+        - total_runs_today
+        - failed_tasks_today
+        - blocked_tasks
+        - worker_errors
+
+    HermesBoard:
+      type: object
+      description: Hermes Kanban runtime board — workflow coordination surface. Not a scoring or verdict authority.
+      properties:
+        workers:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesWorker"
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/HermesRun"
+        lanes:
+          $ref: "#/components/schemas/HermesBoardLanes"
+        system_health:
+          $ref: "#/components/schemas/HermesBoardSystemHealth"
+      required:
+        - workers
+        - runs
+        - lanes
+        - system_health
+
+    CreateHermesRunRequest:
+      type: object
+      properties:
+        asset:
+          type: string
+        timeframe:
+          type: string
+          enum: [1H, 4H, 1D]
+      required:
+        - asset
+        - timeframe
 
     HermesMetrics:
       type: object

@@ -14,6 +14,7 @@ import {
   HermesConstraintsUpdateWaitBiasPolicy,
 } from "@workspace/api-client-react";
 import { HermesBoundaryPanel, HermesFindingsPanel } from "@/components/hermes-findings";
+import HermesBoardPage from "@/components/hermes-board";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProcessVerdictBadge } from "@/components/signal-process";
@@ -22,7 +23,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+type HermesTab = "board" | "config";
+
 export default function Hermes() {
+  const [activeTab, setActiveTab] = useState<HermesTab>("board");
   const queryClient = useQueryClient();
   const { data: status, isLoading: isLoadingStatus } = useGetHermesStatus();
   const { data: constraints, isLoading: isLoadingConstraints } = useGetHermesConstraints();
@@ -96,8 +100,41 @@ export default function Hermes() {
 
   const waitRate = status?.totalScansToday ? (status.totalWaitToday / status.totalScansToday * 100) : 0;
 
+  const tabBar = (
+    <div className="flex items-end gap-0 border-b border-border">
+      {([
+        { key: "board",  label: "OPERATIONS BOARD",  sub: "Kanban runtime · task lanes · workers" },
+        { key: "config", label: "RUNTIME CONFIG",     sub: "Constraints · scan loop · routing" },
+      ] as const).map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => setActiveTab(tab.key)}
+          className={cn(
+            "flex flex-col gap-0.5 px-5 py-3 border-b-2 transition-colors",
+            activeTab === tab.key
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span className="font-mono text-[10px] font-bold uppercase tracking-widest">{tab.label}</span>
+          <span className="font-mono text-[8px] text-muted-foreground/50 uppercase">{tab.sub}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  if (activeTab === "board") {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto pb-12">
+        {tabBar}
+        <HermesBoardPage />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {tabBar}
 
       {/* AUTHORITY BOUNDARY MODEL */}
       <div className="bg-card border border-primary/30 p-6">
