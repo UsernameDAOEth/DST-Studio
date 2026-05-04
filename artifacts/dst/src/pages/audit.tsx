@@ -70,9 +70,9 @@ export default function Audit() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {signalId && (
+          {audit.pinned && audit.pinnedSignalId && (
             <span className="font-mono text-[9px] text-muted-foreground/50 uppercase tracking-widest">
-              PINNED TO SIGNAL #{signalId}
+              PINNED TO SIGNAL #{audit.pinnedSignalId}
             </span>
           )}
           <span className="text-muted-foreground text-xs font-mono uppercase">

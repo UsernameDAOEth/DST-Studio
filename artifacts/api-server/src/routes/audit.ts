@@ -38,7 +38,7 @@ router.get("/:asset", async (req, res) => {
       res.status(400).json({ error: `Signal #${signalId} belongs to ${row.asset}, not ${asset}` });
       return;
     }
-    res.json(row.auditReport);
+    res.json({ ...row.auditReport, pinned: true, pinnedSignalId: signalId });
     return;
   }
 
@@ -50,7 +50,7 @@ router.get("/:asset", async (req, res) => {
     .limit(1);
 
   if (latest) {
-    res.json(latest.auditReport);
+    res.json({ ...latest.auditReport, pinned: false });
     return;
   }
 

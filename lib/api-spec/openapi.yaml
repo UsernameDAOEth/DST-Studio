@@ -1023,12 +1023,19 @@ components:
         generatedAt:
           type: string
           format: date-time
+        pinned:
+          type: boolean
+          description: Whether this audit report was pinned to a specific signal snapshot
+        pinnedSignalId:
+          type: integer
+          description: The signal ID this audit is pinned to, present only when pinned is true
       required:
         - asset
         - verdict
         - checks
         - summary
         - generatedAt
+        - pinned
 
     AuditCheck:
       type: object

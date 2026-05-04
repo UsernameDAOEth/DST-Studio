@@ -260,6 +260,17 @@ export const GetSignalByAssetResponse = zod
           ),
           summary: zod.string(),
           generatedAt: zod.coerce.date(),
+          pinned: zod
+            .boolean()
+            .describe(
+              "Whether this audit report was pinned to a specific signal snapshot",
+            ),
+          pinnedSignalId: zod
+            .number()
+            .optional()
+            .describe(
+              "The signal ID this audit is pinned to, present only when pinned is true",
+            ),
         })
         .optional(),
       preTradChecklist: zod
@@ -859,6 +870,17 @@ export const GetAuditByAssetResponse = zod.object({
   ),
   summary: zod.string(),
   generatedAt: zod.coerce.date(),
+  pinned: zod
+    .boolean()
+    .describe(
+      "Whether this audit report was pinned to a specific signal snapshot",
+    ),
+  pinnedSignalId: zod
+    .number()
+    .optional()
+    .describe(
+      "The signal ID this audit is pinned to, present only when pinned is true",
+    ),
 });
 
 /**
