@@ -22,7 +22,7 @@ router.get("/:asset", async (req, res) => {
   const signalIdParam = req.query.signalId;
   if (signalIdParam) {
     const signalId = Number(signalIdParam);
-    if (!Number.isFinite(signalId)) {
+    if (!Number.isInteger(signalId) || signalId <= 0) {
       res.status(400).json({ error: "Invalid signalId" });
       return;
     }
