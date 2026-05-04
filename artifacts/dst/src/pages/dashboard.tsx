@@ -14,20 +14,23 @@ function DirectionChip({ direction }: { direction: string }) {
 }
 
 function DataGradeChip({ grade }: { grade?: string }) {
-  if (!grade || grade === "FULL") return null;
+  if (!grade || grade === "GOOD") return null;
   if (grade === "DEGRADED") return <span className="chip-warn text-[7px]">DEGRADED</span>;
-  if (grade === "MINIMAL") return <span className="chip-fail text-[7px]">MINIMAL</span>;
+  if (grade === "POOR") return <span className="chip-fail text-[7px]">POOR</span>;
+  if (grade === "CRITICAL") return <span className="chip-fail text-[7px]">CRITICAL</span>;
   return <span className="chip-skip text-[7px]">{grade}</span>;
 }
 
-function PipelineChips({ dataQuality }: { dataQuality?: { grade?: string; flags?: string[] } }) {
+function PipelineChips({ dataQuality }: { dataQuality?: { grade?: string; flags?: string[]; pythVerifier?: { verdict?: string } } }) {
   if (!dataQuality) return null;
   const flags = dataQuality.flags ?? [];
   const chips: { label: string; variant: "warn" | "fail" }[] = [];
   if (flags.includes("SYNTHETIC_OI")) chips.push({ label: "OI: EST", variant: "warn" });
   if (flags.includes("SYNTHETIC_FUNDING")) chips.push({ label: "FUND: EST", variant: "warn" });
   if (flags.includes("VOLUME_MISSING")) chips.push({ label: "VOL: N/A", variant: "fail" });
-  const hasGradeChip = dataQuality.grade && dataQuality.grade !== "FULL";
+  const pythVerdict = dataQuality.pythVerifier?.verdict;
+  if (pythVerdict === "SKIPPED" || pythVerdict === "UNAVAILABLE") chips.push({ label: "PYTH: OFF", variant: "warn" });
+  const hasGradeChip = dataQuality.grade && dataQuality.grade !== "GOOD";
   if (!hasGradeChip && chips.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1 mt-1">
@@ -81,7 +84,7 @@ function AssetCard({ asset }: { asset: string }) {
     signal.direction === "SHORT" ? "hsl(var(--trade-short))" :
     "hsl(var(--trade-wait))";
 
-  const sig = signal as typeof signal & { dataQuality?: { grade?: string; flags?: string[] } };
+  const sig = signal as typeof signal & { dataQuality?: { grade?: string; flags?: string[]; pythVerifier?: { verdict?: string } } };
 
   return (
     <Link href={`/signal/${asset}`} className="block group">
