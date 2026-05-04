@@ -59,6 +59,112 @@ function PacketField({
   );
 }
 
+function PythMarketSnapshotCard({ snapshot }: {
+  snapshot: {
+    symbol: string;
+    asset: string;
+    feedId: string;
+    price: number;
+    confidence: number;
+    confidencePct: number;
+    confidenceStatus: string;
+    publishTime: string;
+    stalenessSec: number;
+    isStale: boolean;
+    isConfidenceWide: boolean;
+    emaPrice: number;
+    source: string;
+  };
+}) {
+  const isWarn = snapshot.isStale || snapshot.isConfidenceWide;
+  const feedIdShort = `${snapshot.feedId.slice(0, 8)}…${snapshot.feedId.slice(-4)}`;
+  const staleness = Math.round(snapshot.stalenessSec);
+
+  return (
+    <div className={cn("terminal-panel", isWarn && "border-[hsl(var(--trade-wait))]/50")}>
+      <div className="terminal-panel-header">
+        <div className="flex items-center gap-2">
+          {isWarn && <AlertTriangle className="w-3 h-3 text-[hsl(var(--trade-wait))]" />}
+          <span>PYTH MARKET SNAPSHOT</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {snapshot.isStale && (
+            <span className="chip-warn text-[7px]">STALE</span>
+          )}
+          {snapshot.isConfidenceWide && (
+            <span className="chip-warn text-[7px]">WIDE CONF</span>
+          )}
+          <span className={cn(
+            "font-mono text-[9px] font-bold tracking-widest",
+            isWarn ? "text-[hsl(var(--trade-wait))]" : "text-primary"
+          )}>
+            {snapshot.symbol}
+          </span>
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+          <div>
+            <FieldLabel>PRICE</FieldLabel>
+            <div className={cn("font-mono text-sm font-bold mono-nums", isWarn ? "text-[hsl(var(--trade-wait))]" : "text-foreground")}>
+              {formatCurrency(snapshot.price)}
+            </div>
+          </div>
+          <div>
+            <FieldLabel>CONFIDENCE</FieldLabel>
+            <div className={cn(
+              "font-mono text-sm font-bold mono-nums",
+              snapshot.isConfidenceWide ? "text-[hsl(var(--trade-wait))]" : "text-foreground"
+            )}>
+              ±{snapshot.confidencePct.toFixed(3)}%
+            </div>
+            <div className={cn(
+              "font-mono text-[9px] mt-0.5 uppercase tracking-widest",
+              snapshot.confidenceStatus === "HIGH" ? "text-primary/60" :
+              snapshot.confidenceStatus === "MEDIUM" ? "text-foreground/40" :
+              "text-[hsl(var(--trade-wait))]/70"
+            )}>
+              {snapshot.confidenceStatus}
+            </div>
+          </div>
+          <div>
+            <FieldLabel>STALENESS</FieldLabel>
+            <div className={cn(
+              "font-mono text-sm font-bold mono-nums",
+              snapshot.isStale ? "text-[hsl(var(--trade-wait))]" : "text-foreground"
+            )}>
+              {staleness}s
+            </div>
+            <div className="font-mono text-[9px] text-muted-foreground/50 mt-0.5 uppercase tracking-widest">
+              {snapshot.isStale ? "STALE >60S" : "FRESH"}
+            </div>
+          </div>
+          <div>
+            <FieldLabel>EMA PRICE</FieldLabel>
+            <div className="font-mono text-sm font-bold mono-nums text-muted-foreground">
+              {formatCurrency(snapshot.emaPrice)}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-border/50 flex flex-col md:flex-row justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <FieldLabel>FEED ID</FieldLabel>
+            <span className="font-mono text-[9px] text-muted-foreground/60 tracking-wider">{feedIdShort}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="micro-label">PUBLISH</span>
+            <span className="font-mono text-[9px] text-muted-foreground/60">
+              {new Date(snapshot.publishTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+            <span className="chip-reason text-[7px]">PYTH HERMES V2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PipelineIndicators({ dataQuality, constraints }: {
   dataQuality?: { flags?: string[] };
   constraints?: { pythConfidenceFilter?: boolean; browserbaseTriggerPolicy?: string; alertRouting?: { telegram?: boolean; xmtp?: boolean; discord?: boolean } };
@@ -457,6 +563,11 @@ export default function SignalDetail() {
           </div>
         </div>
       </div>
+
+      {/* PYTH MARKET SNAPSHOT */}
+      {signal.pythSnapshot && (
+        <PythMarketSnapshotCard snapshot={signal.pythSnapshot as Parameters<typeof PythMarketSnapshotCard>[0]["snapshot"]} />
+      )}
 
       {/* DATA QUALITY & PROVENANCE */}
       {signal.dataQuality && (

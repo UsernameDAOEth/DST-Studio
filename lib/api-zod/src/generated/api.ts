@@ -332,6 +332,8 @@ export const GetSignalByAssetResponse = zod
                 "CONFLICTING_PRICES",
                 "PYTH_DIVERGENCE",
                 "PYTH_UNAVAILABLE",
+                "PYTH_STALE",
+                "PYTH_CONFIDENCE_WIDE",
                 "TVL_MISSING",
                 "VOLUME_MISSING",
                 "DATA_UNAVAILABLE",
@@ -802,6 +804,75 @@ export const GetSignalByAssetResponse = zod
         .optional()
         .describe(
           "SHA-256 content hash (first 16 hex chars) of the canonical normalized input packet. Same normalized input always produces the same hash — enabling deterministic identity and replay verification.\n",
+        ),
+      pythSnapshot: zod
+        .object({
+          provider: zod.enum(["PYTH_HERMES_V2"]),
+          source: zod.enum(["PYTH_HERMES"]),
+          feedId: zod
+            .string()
+            .describe("Full 64-char hex Pyth feed ID (without 0x prefix)"),
+          symbol: zod
+            .string()
+            .describe("Canonical symbol (e.g. BTC\/USD, ETH\/USD)"),
+          asset: zod.string().describe("Base asset ticker (e.g. BTC, ETH)"),
+          price: zod
+            .number()
+            .describe("Current price adjusted by the Pyth exponent"),
+          confidence: zod
+            .number()
+            .describe("Absolute confidence interval in USD (±value)"),
+          confidencePct: zod
+            .number()
+            .describe("confidence \/ price × 100 — percentage of price"),
+          confidenceStatus: zod
+            .enum(["HIGH", "MEDIUM", "LOW"])
+            .describe(
+              "HIGH = confidencePct < 0.1%, MEDIUM = < 1%, LOW = >= 1%. LOW and MEDIUM drive the isConfidenceWide flag.\n",
+            ),
+          expo: zod
+            .number()
+            .describe("Pyth raw price exponent (price = raw × 10^expo)"),
+          publishTime: zod.coerce
+            .date()
+            .describe(
+              "ISO timestamp when Pyth publishers last updated this price",
+            ),
+          stalenessSec: zod
+            .number()
+            .describe("Seconds elapsed since publishTime at fetch time"),
+          isStale: zod.boolean().describe("True when stalenessSec > 60"),
+          isConfidenceWide: zod
+            .boolean()
+            .describe("True when confidence \/ price > 0.01 (1% threshold)"),
+          emaPrice: zod
+            .number()
+            .describe("Pyth exponential moving average price"),
+          emaConfidence: zod
+            .number()
+            .describe("Absolute EMA confidence interval in USD"),
+          metadata: zod.object({
+            prevPublishTime: zod.number(),
+            prevPrice: zod.string().nullable(),
+            prevConf: zod.string().nullable(),
+          }),
+          raw: zod
+            .object({
+              price: zod.string(),
+              conf: zod.string(),
+              expo: zod.number(),
+              publish_time: zod.number(),
+            })
+            .describe(
+              "Raw string values from the Hermes API response before exponent scaling",
+            ),
+          fetchedAt: zod.coerce
+            .date()
+            .describe("When this snapshot was fetched from Hermes"),
+        })
+        .nullish()
+        .describe(
+          "Canonical Pyth Hermes v2 market snapshot captured at signal computation time. Provides secondary price context: symbol, feedId, price, confidence interval, staleness, and EMA price. Null when Pyth is unavailable. isStale and isConfidenceWide drive the PYTH_PRICE_CONTEXT audit check and UI warning styling.\n",
         ),
     }),
   );
@@ -2564,4 +2635,192 @@ export const GetPythPriceByAssetResponse = zod
   })
   .describe(
     "Live price and confidence data from the Pyth Network Hermes REST API. Confidence reflects the price band around the reported price. A confidence ratio (confidence\/price) below the threshold in HermesConstraints degrades or blocks APPROVED verdicts when pythConfidenceFilter is enabled.\n",
+  );
+
+/**
+ * Queries the Pyth Hermes v2 /v2/price_feeds endpoint for each known symbol (BTC/USD, ETH/USD). Returns feed metadata including feedId, description, and asset type. Results reflect live Hermes discovery — add new symbols by extending the server-side registry.
+
+ * @summary Discover all registered Pyth v2 price feeds for tracked symbols
+ */
+export const GetPythFeedsResponseItem = zod
+  .object({
+    feedId: zod.string().describe("64-char hex Pyth feed ID"),
+    symbol: zod
+      .string()
+      .describe("Canonical trading pair symbol (e.g. BTC\/USD)"),
+    asset: zod.string().describe("Base asset ticker (e.g. BTC)"),
+    description: zod
+      .string()
+      .describe("Human-readable feed description from Pyth"),
+    assetType: zod
+      .string()
+      .describe("Pyth asset type classification (e.g. crypto)"),
+  })
+  .describe(
+    "Feed discovery metadata from the Pyth Hermes v2 \/v2\/price_feeds endpoint. Returned by \/pyth\/feeds and \/pyth\/feeds\/{symbol}. feedId is the canonical 64-char hex identifier used in snapshot requests.\n",
+  );
+export const GetPythFeedsResponse = zod.array(GetPythFeedsResponseItem);
+
+/**
+ * @summary Discover Pyth v2 feed for a specific symbol
+ */
+export const GetPythFeedBySymbolParams = zod.object({
+  symbol: zod.coerce
+    .string()
+    .describe("Symbol to discover (e.g. BTC, ETH, or BTC%2FUSD)"),
+});
+
+export const GetPythFeedBySymbolResponse = zod
+  .object({
+    feedId: zod.string().describe("64-char hex Pyth feed ID"),
+    symbol: zod
+      .string()
+      .describe("Canonical trading pair symbol (e.g. BTC\/USD)"),
+    asset: zod.string().describe("Base asset ticker (e.g. BTC)"),
+    description: zod
+      .string()
+      .describe("Human-readable feed description from Pyth"),
+    assetType: zod
+      .string()
+      .describe("Pyth asset type classification (e.g. crypto)"),
+  })
+  .describe(
+    "Feed discovery metadata from the Pyth Hermes v2 \/v2\/price_feeds endpoint. Returned by \/pyth\/feeds and \/pyth\/feeds\/{symbol}. feedId is the canonical 64-char hex identifier used in snapshot requests.\n",
+  );
+
+/**
+ * Returns normalized PythSnapshot packets for all registered assets. Each packet includes provider, feedId, symbol, price, confidence, confidencePct, expo, publishTime, stalenessSec, emaPrice, metadata, and raw payload. isStale is true when publishTime > 60s ago. isConfidenceWide is true when confidence > 1% of price.
+
+ * @summary Get canonical Pyth v2 market snapshots for all tracked assets
+ */
+export const GetPythSnapshotsResponseItem = zod
+  .object({
+    provider: zod.enum(["PYTH_HERMES_V2"]),
+    source: zod.enum(["PYTH_HERMES"]),
+    feedId: zod
+      .string()
+      .describe("Full 64-char hex Pyth feed ID (without 0x prefix)"),
+    symbol: zod.string().describe("Canonical symbol (e.g. BTC\/USD, ETH\/USD)"),
+    asset: zod.string().describe("Base asset ticker (e.g. BTC, ETH)"),
+    price: zod.number().describe("Current price adjusted by the Pyth exponent"),
+    confidence: zod
+      .number()
+      .describe("Absolute confidence interval in USD (±value)"),
+    confidencePct: zod
+      .number()
+      .describe("confidence \/ price × 100 — percentage of price"),
+    confidenceStatus: zod
+      .enum(["HIGH", "MEDIUM", "LOW"])
+      .describe(
+        "HIGH = confidencePct < 0.1%, MEDIUM = < 1%, LOW = >= 1%. LOW and MEDIUM drive the isConfidenceWide flag.\n",
+      ),
+    expo: zod
+      .number()
+      .describe("Pyth raw price exponent (price = raw × 10^expo)"),
+    publishTime: zod.coerce
+      .date()
+      .describe("ISO timestamp when Pyth publishers last updated this price"),
+    stalenessSec: zod
+      .number()
+      .describe("Seconds elapsed since publishTime at fetch time"),
+    isStale: zod.boolean().describe("True when stalenessSec > 60"),
+    isConfidenceWide: zod
+      .boolean()
+      .describe("True when confidence \/ price > 0.01 (1% threshold)"),
+    emaPrice: zod.number().describe("Pyth exponential moving average price"),
+    emaConfidence: zod
+      .number()
+      .describe("Absolute EMA confidence interval in USD"),
+    metadata: zod.object({
+      prevPublishTime: zod.number(),
+      prevPrice: zod.string().nullable(),
+      prevConf: zod.string().nullable(),
+    }),
+    raw: zod
+      .object({
+        price: zod.string(),
+        conf: zod.string(),
+        expo: zod.number(),
+        publish_time: zod.number(),
+      })
+      .describe(
+        "Raw string values from the Hermes API response before exponent scaling",
+      ),
+    fetchedAt: zod.coerce
+      .date()
+      .describe("When this snapshot was fetched from Hermes"),
+  })
+  .describe(
+    "Canonical Pyth Hermes v2 market snapshot. Normalized from the \/v2\/updates\/price\/latest endpoint. provider is always PYTH_HERMES_V2. isStale = true when stalenessSec > 60. isConfidenceWide = true when confidence > 1% of price. This packet is attached to signal detail responses as price context; it never drives or overrides the DJZS verdict.\n",
+  );
+export const GetPythSnapshotsResponse = zod.array(GetPythSnapshotsResponseItem);
+
+/**
+ * @summary Get canonical Pyth v2 market snapshot for a specific asset
+ */
+export const GetPythSnapshotBySymbolParams = zod.object({
+  symbol: zod.coerce
+    .string()
+    .describe("Asset symbol (e.g. BTC, ETH) or pair (e.g. BTC%2FUSD)"),
+});
+
+export const GetPythSnapshotBySymbolResponse = zod
+  .object({
+    provider: zod.enum(["PYTH_HERMES_V2"]),
+    source: zod.enum(["PYTH_HERMES"]),
+    feedId: zod
+      .string()
+      .describe("Full 64-char hex Pyth feed ID (without 0x prefix)"),
+    symbol: zod.string().describe("Canonical symbol (e.g. BTC\/USD, ETH\/USD)"),
+    asset: zod.string().describe("Base asset ticker (e.g. BTC, ETH)"),
+    price: zod.number().describe("Current price adjusted by the Pyth exponent"),
+    confidence: zod
+      .number()
+      .describe("Absolute confidence interval in USD (±value)"),
+    confidencePct: zod
+      .number()
+      .describe("confidence \/ price × 100 — percentage of price"),
+    confidenceStatus: zod
+      .enum(["HIGH", "MEDIUM", "LOW"])
+      .describe(
+        "HIGH = confidencePct < 0.1%, MEDIUM = < 1%, LOW = >= 1%. LOW and MEDIUM drive the isConfidenceWide flag.\n",
+      ),
+    expo: zod
+      .number()
+      .describe("Pyth raw price exponent (price = raw × 10^expo)"),
+    publishTime: zod.coerce
+      .date()
+      .describe("ISO timestamp when Pyth publishers last updated this price"),
+    stalenessSec: zod
+      .number()
+      .describe("Seconds elapsed since publishTime at fetch time"),
+    isStale: zod.boolean().describe("True when stalenessSec > 60"),
+    isConfidenceWide: zod
+      .boolean()
+      .describe("True when confidence \/ price > 0.01 (1% threshold)"),
+    emaPrice: zod.number().describe("Pyth exponential moving average price"),
+    emaConfidence: zod
+      .number()
+      .describe("Absolute EMA confidence interval in USD"),
+    metadata: zod.object({
+      prevPublishTime: zod.number(),
+      prevPrice: zod.string().nullable(),
+      prevConf: zod.string().nullable(),
+    }),
+    raw: zod
+      .object({
+        price: zod.string(),
+        conf: zod.string(),
+        expo: zod.number(),
+        publish_time: zod.number(),
+      })
+      .describe(
+        "Raw string values from the Hermes API response before exponent scaling",
+      ),
+    fetchedAt: zod.coerce
+      .date()
+      .describe("When this snapshot was fetched from Hermes"),
+  })
+  .describe(
+    "Canonical Pyth Hermes v2 market snapshot. Normalized from the \/v2\/updates\/price\/latest endpoint. provider is always PYTH_HERMES_V2. isStale = true when stalenessSec > 60. isConfidenceWide = true when confidence > 1% of price. This packet is attached to signal detail responses as price context; it never drives or overrides the DJZS verdict.\n",
   );

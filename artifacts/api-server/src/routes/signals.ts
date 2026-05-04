@@ -9,6 +9,7 @@ import {
   GetSignalFeedQueryParams,
 } from "@workspace/api-zod";
 import { ASSET_MAP } from "../lib/dst/defillamaClient";
+import { fetchPythSnapshot } from "../lib/pyth/pythClient";
 
 const router = Router();
 
@@ -141,7 +142,11 @@ router.get("/:asset", async (req, res) => {
     return;
   }
 
-  const row = await getOrComputeSignal(asset);
+  const [row, pythSnapshot] = await Promise.all([
+    getOrComputeSignal(asset),
+    fetchPythSnapshot(asset).catch(() => null),
+  ]);
+
   if (!row) {
     res.status(500).json({ error: "Failed to compute signal" });
     return;
@@ -158,6 +163,7 @@ router.get("/:asset", async (req, res) => {
     dataQuality: row.dataQuality,
     verificationReport: row.verificationReport,
     packetHash: row.packetHash,
+    pythSnapshot: pythSnapshot ?? null,
   });
 });
 

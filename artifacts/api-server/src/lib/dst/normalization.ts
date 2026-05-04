@@ -72,6 +72,11 @@ export interface NormalizedInputPacket {
   invalidationPrice: number;
   rrRatio: number;
 
+  // Pyth context — secondary price verifier (null when unavailable)
+  pythPrice: number | null;
+  pythConfidencePct: number | null;
+  pythFeedId: string | null;
+
   // Normalization diagnostics
   normalizationErrors: string[];
   hasCriticalNormalizationError: boolean;
@@ -105,6 +110,9 @@ export interface NormalizeInputsParams {
   targetZone: number;
   invalidationPrice: number;
   rrRatio: number;
+  pythPrice?: number | null;
+  pythConfidencePct?: number | null;
+  pythFeedId?: string | null;
 }
 
 export function normalizeInputs(params: NormalizeInputsParams): NormalizedInputPacket {
@@ -171,6 +179,9 @@ export function normalizeInputs(params: NormalizeInputsParams): NormalizedInputP
     targetZone,
     invalidationPrice,
     rrRatio,
+    pythPrice: params.pythPrice ?? null,
+    pythConfidencePct: params.pythConfidencePct ?? null,
+    pythFeedId: params.pythFeedId ?? null,
     normalizationErrors: errors,
     hasCriticalNormalizationError,
     normalizedAt: new Date().toISOString(),
@@ -183,6 +194,7 @@ export function normalizeInputs(params: NormalizeInputsParams): NormalizedInputP
 const P_PRICE = 2;
 const P_INDICATOR = 6;
 const P_RATIO = 4;
+const P_PCT = 4;
 
 export function hashPacket(packet: NormalizedInputPacket): string {
   // Exclude time-varying metadata: normalizedAt, priceFetchedAt, priceAgeMs,
@@ -210,6 +222,9 @@ export function hashPacket(packet: NormalizedInputPacket): string {
     targetZone: roundTo(packet.targetZone, P_PRICE),
     invalidationPrice: roundTo(packet.invalidationPrice, P_PRICE),
     rrRatio: roundTo(packet.rrRatio, P_RATIO),
+    pythPrice: packet.pythPrice != null ? roundTo(packet.pythPrice, P_PRICE) : null,
+    pythConfidencePct: packet.pythConfidencePct != null ? roundTo(packet.pythConfidencePct, P_PCT) : null,
+    pythFeedId: packet.pythFeedId ?? null,
   };
 
   // Sort keys for canonical representation — insertion-order independent

@@ -675,6 +675,93 @@ paths:
               schema:
                 $ref: "#/components/schemas/PythPriceData"
 
+  /pyth/feeds:
+    get:
+      operationId: getPythFeeds
+      tags: [pyth]
+      summary: Discover all registered Pyth v2 price feeds for tracked symbols
+      description: >
+        Queries the Pyth Hermes v2 /v2/price_feeds endpoint for each known symbol
+        (BTC/USD, ETH/USD). Returns feed metadata including feedId, description,
+        and asset type. Results reflect live Hermes discovery — add new symbols by
+        extending the server-side registry.
+      responses:
+        "200":
+          description: List of Pyth feed metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PythFeedInfo"
+
+  /pyth/feeds/{symbol}:
+    get:
+      operationId: getPythFeedBySymbol
+      tags: [pyth]
+      summary: Discover Pyth v2 feed for a specific symbol
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Symbol to discover (e.g. BTC, ETH, or BTC%2FUSD)
+      responses:
+        "200":
+          description: Pyth feed metadata for the symbol
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythFeedInfo"
+        "404":
+          description: No feed found for this symbol
+
+  /pyth/snapshot:
+    get:
+      operationId: getPythSnapshots
+      tags: [pyth]
+      summary: Get canonical Pyth v2 market snapshots for all tracked assets
+      description: >
+        Returns normalized PythSnapshot packets for all registered assets.
+        Each packet includes provider, feedId, symbol, price, confidence,
+        confidencePct, expo, publishTime, stalenessSec, emaPrice, metadata,
+        and raw payload. isStale is true when publishTime > 60s ago.
+        isConfidenceWide is true when confidence > 1% of price.
+      responses:
+        "200":
+          description: Canonical Pyth snapshots for all tracked assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PythSnapshot"
+
+  /pyth/snapshot/{symbol}:
+    get:
+      operationId: getPythSnapshotBySymbol
+      tags: [pyth]
+      summary: Get canonical Pyth v2 market snapshot for a specific asset
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Asset symbol (e.g. BTC, ETH) or pair (e.g. BTC%2FUSD)
+      responses:
+        "200":
+          description: Canonical Pyth snapshot for the asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythSnapshot"
+        "404":
+          description: Asset not supported
+        "503":
+          description: Pyth Hermes temporarily unavailable
+
 components:
   schemas:
     HealthStatus:
@@ -858,6 +945,15 @@ components:
                 normalized input packet. Same normalized input always produces
                 the same hash — enabling deterministic identity and replay
                 verification.
+            pythSnapshot:
+              $ref: "#/components/schemas/PythSnapshot"
+              nullable: true
+              description: >
+                Canonical Pyth Hermes v2 market snapshot captured at signal
+                computation time. Provides secondary price context: symbol,
+                feedId, price, confidence interval, staleness, and EMA price.
+                Null when Pyth is unavailable. isStale and isConfidenceWide
+                drive the PYTH_PRICE_CONTEXT audit check and UI warning styling.
 
     PreTradeChecklist:
       type: object
@@ -1921,6 +2017,146 @@ components:
         - fresh
         - influencesProcessVerdict
 
+    PythSnapshot:
+      type: object
+      description: >
+        Canonical Pyth Hermes v2 market snapshot. Normalized from the
+        /v2/updates/price/latest endpoint. provider is always PYTH_HERMES_V2.
+        isStale = true when stalenessSec > 60. isConfidenceWide = true when
+        confidence > 1% of price. This packet is attached to signal detail
+        responses as price context; it never drives or overrides the DJZS verdict.
+      properties:
+        provider:
+          type: string
+          enum: [PYTH_HERMES_V2]
+        source:
+          type: string
+          enum: [PYTH_HERMES]
+        feedId:
+          type: string
+          description: Full 64-char hex Pyth feed ID (without 0x prefix)
+        symbol:
+          type: string
+          description: Canonical symbol (e.g. BTC/USD, ETH/USD)
+        asset:
+          type: string
+          description: Base asset ticker (e.g. BTC, ETH)
+        price:
+          type: number
+          description: Current price adjusted by the Pyth exponent
+        confidence:
+          type: number
+          description: Absolute confidence interval in USD (±value)
+        confidencePct:
+          type: number
+          description: confidence / price × 100 — percentage of price
+        confidenceStatus:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          description: >
+            HIGH = confidencePct < 0.1%, MEDIUM = < 1%, LOW = >= 1%.
+            LOW and MEDIUM drive the isConfidenceWide flag.
+        expo:
+          type: integer
+          description: Pyth raw price exponent (price = raw × 10^expo)
+        publishTime:
+          type: string
+          format: date-time
+          description: ISO timestamp when Pyth publishers last updated this price
+        stalenessSec:
+          type: number
+          description: Seconds elapsed since publishTime at fetch time
+        isStale:
+          type: boolean
+          description: True when stalenessSec > 60
+        isConfidenceWide:
+          type: boolean
+          description: True when confidence / price > 0.01 (1% threshold)
+        emaPrice:
+          type: number
+          description: Pyth exponential moving average price
+        emaConfidence:
+          type: number
+          description: Absolute EMA confidence interval in USD
+        metadata:
+          type: object
+          properties:
+            prevPublishTime:
+              type: integer
+            prevPrice:
+              type: string
+              nullable: true
+            prevConf:
+              type: string
+              nullable: true
+          required: [prevPublishTime, prevPrice, prevConf]
+        raw:
+          type: object
+          description: Raw string values from the Hermes API response before exponent scaling
+          properties:
+            price:
+              type: string
+            conf:
+              type: string
+            expo:
+              type: integer
+            publish_time:
+              type: integer
+          required: [price, conf, expo, publish_time]
+        fetchedAt:
+          type: string
+          format: date-time
+          description: When this snapshot was fetched from Hermes
+      required:
+        - provider
+        - source
+        - feedId
+        - symbol
+        - asset
+        - price
+        - confidence
+        - confidencePct
+        - confidenceStatus
+        - expo
+        - publishTime
+        - stalenessSec
+        - isStale
+        - isConfidenceWide
+        - emaPrice
+        - emaConfidence
+        - metadata
+        - raw
+        - fetchedAt
+
+    PythFeedInfo:
+      type: object
+      description: >
+        Feed discovery metadata from the Pyth Hermes v2 /v2/price_feeds endpoint.
+        Returned by /pyth/feeds and /pyth/feeds/{symbol}. feedId is the canonical
+        64-char hex identifier used in snapshot requests.
+      properties:
+        feedId:
+          type: string
+          description: 64-char hex Pyth feed ID
+        symbol:
+          type: string
+          description: Canonical trading pair symbol (e.g. BTC/USD)
+        asset:
+          type: string
+          description: Base asset ticker (e.g. BTC)
+        description:
+          type: string
+          description: Human-readable feed description from Pyth
+        assetType:
+          type: string
+          description: Pyth asset type classification (e.g. crypto)
+      required:
+        - feedId
+        - symbol
+        - asset
+        - description
+        - assetType
+
     DataProvenance:
       type: object
       description: >
@@ -2063,6 +2299,8 @@ components:
               - CONFLICTING_PRICES
               - PYTH_DIVERGENCE
               - PYTH_UNAVAILABLE
+              - PYTH_STALE
+              - PYTH_CONFIDENCE_WIDE
               - TVL_MISSING
               - VOLUME_MISSING
               - DATA_UNAVAILABLE

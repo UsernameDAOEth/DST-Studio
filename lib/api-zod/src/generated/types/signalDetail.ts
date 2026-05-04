@@ -12,6 +12,7 @@ import type { MarketSnapshot } from "./marketSnapshot";
 import type { OIContext } from "./oIContext";
 import type { OutcomeTracking } from "./outcomeTracking";
 import type { PreTradeChecklist } from "./preTradeChecklist";
+import type { PythSnapshot } from "./pythSnapshot";
 import type { Signal } from "./signal";
 import type { TrendRegime } from "./trendRegime";
 import type { VerificationReport } from "./verificationReport";
@@ -35,4 +36,7 @@ export type SignalDetail = Signal & {
   /** SHA-256 content hash (first 16 hex chars) of the canonical normalized input packet. Same normalized input always produces the same hash — enabling deterministic identity and replay verification.
    */
   packetHash?: string;
+  /** Canonical Pyth Hermes v2 market snapshot captured at signal computation time. Provides secondary price context: symbol, feedId, price, confidence interval, staleness, and EMA price. Null when Pyth is unavailable. isStale and isConfidenceWide drive the PYTH_PRICE_CONTEXT audit check and UI warning styling.
+   */
+  pythSnapshot?: PythSnapshot | null;
 };

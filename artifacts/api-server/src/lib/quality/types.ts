@@ -34,6 +34,8 @@ export type QualityFlag =
   | "CONFLICTING_PRICES"
   | "PYTH_DIVERGENCE"
   | "PYTH_UNAVAILABLE"
+  | "PYTH_STALE"
+  | "PYTH_CONFIDENCE_WIDE"
   | "TVL_MISSING"
   | "VOLUME_MISSING"
   | "DATA_UNAVAILABLE";
@@ -69,7 +71,7 @@ export function makeProvenance(
   };
 }
 
-// ── Pyth verifier (scaffolded) ────────────────────────────────────────────────
+// ── Pyth verifier (upgraded) ──────────────────────────────────────────────────
 
 export type PythVerifierVerdict = "CONFIRMS" | "DIVERGES" | "UNAVAILABLE" | "SKIPPED";
 
@@ -144,7 +146,18 @@ export interface DataQualityReport {
 
 export function computeDataQualityGrade(flags: QualityFlag[]): DataQualityGrade {
   if (flags.includes("MISSING_PRICE") || flags.includes("DATA_UNAVAILABLE")) return "CRITICAL";
-  if (flags.includes("STALE_PRICE") || flags.includes("FALLBACK_PRICE_USED") || flags.includes("INSUFFICIENT_HISTORY")) return "POOR";
-  if (flags.includes("CONFLICTING_PRICES") || flags.includes("PYTH_DIVERGENCE") || flags.includes("STALE_HISTORY") || flags.includes("LOW_CONFIDENCE")) return "DEGRADED";
+  if (
+    flags.includes("STALE_PRICE") ||
+    flags.includes("FALLBACK_PRICE_USED") ||
+    flags.includes("INSUFFICIENT_HISTORY") ||
+    flags.includes("PYTH_STALE")
+  ) return "POOR";
+  if (
+    flags.includes("CONFLICTING_PRICES") ||
+    flags.includes("PYTH_DIVERGENCE") ||
+    flags.includes("PYTH_CONFIDENCE_WIDE") ||
+    flags.includes("STALE_HISTORY") ||
+    flags.includes("LOW_CONFIDENCE")
+  ) return "DEGRADED";
   return "GOOD";
 }

@@ -332,6 +332,8 @@ export const DataQualityReportFlagsItem = {
   CONFLICTING_PRICES: "CONFLICTING_PRICES",
   PYTH_DIVERGENCE: "PYTH_DIVERGENCE",
   PYTH_UNAVAILABLE: "PYTH_UNAVAILABLE",
+  PYTH_STALE: "PYTH_STALE",
+  PYTH_CONFIDENCE_WIDE: "PYTH_CONFIDENCE_WIDE",
   TVL_MISSING: "TVL_MISSING",
   VOLUME_MISSING: "VOLUME_MISSING",
   DATA_UNAVAILABLE: "DATA_UNAVAILABLE",
@@ -663,6 +665,92 @@ export interface VerificationReport {
   verifiedAt: string;
 }
 
+export type PythSnapshotProvider =
+  (typeof PythSnapshotProvider)[keyof typeof PythSnapshotProvider];
+
+export const PythSnapshotProvider = {
+  PYTH_HERMES_V2: "PYTH_HERMES_V2",
+} as const;
+
+export type PythSnapshotSource =
+  (typeof PythSnapshotSource)[keyof typeof PythSnapshotSource];
+
+export const PythSnapshotSource = {
+  PYTH_HERMES: "PYTH_HERMES",
+} as const;
+
+/**
+ * HIGH = confidencePct < 0.1%, MEDIUM = < 1%, LOW = >= 1%. LOW and MEDIUM drive the isConfidenceWide flag.
+
+ */
+export type PythSnapshotConfidenceStatus =
+  (typeof PythSnapshotConfidenceStatus)[keyof typeof PythSnapshotConfidenceStatus];
+
+export const PythSnapshotConfidenceStatus = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export type PythSnapshotMetadata = {
+  prevPublishTime: number;
+  prevPrice: string | null;
+  prevConf: string | null;
+};
+
+/**
+ * Raw string values from the Hermes API response before exponent scaling
+ */
+export type PythSnapshotRaw = {
+  price: string;
+  conf: string;
+  expo: number;
+  publish_time: number;
+};
+
+/**
+ * Canonical Pyth Hermes v2 market snapshot. Normalized from the /v2/updates/price/latest endpoint. provider is always PYTH_HERMES_V2. isStale = true when stalenessSec > 60. isConfidenceWide = true when confidence > 1% of price. This packet is attached to signal detail responses as price context; it never drives or overrides the DJZS verdict.
+
+ */
+export interface PythSnapshot {
+  provider: PythSnapshotProvider;
+  source: PythSnapshotSource;
+  /** Full 64-char hex Pyth feed ID (without 0x prefix) */
+  feedId: string;
+  /** Canonical symbol (e.g. BTC/USD, ETH/USD) */
+  symbol: string;
+  /** Base asset ticker (e.g. BTC, ETH) */
+  asset: string;
+  /** Current price adjusted by the Pyth exponent */
+  price: number;
+  /** Absolute confidence interval in USD (±value) */
+  confidence: number;
+  /** confidence / price × 100 — percentage of price */
+  confidencePct: number;
+  /** HIGH = confidencePct < 0.1%, MEDIUM = < 1%, LOW = >= 1%. LOW and MEDIUM drive the isConfidenceWide flag.
+   */
+  confidenceStatus: PythSnapshotConfidenceStatus;
+  /** Pyth raw price exponent (price = raw × 10^expo) */
+  expo: number;
+  /** ISO timestamp when Pyth publishers last updated this price */
+  publishTime: string;
+  /** Seconds elapsed since publishTime at fetch time */
+  stalenessSec: number;
+  /** True when stalenessSec > 60 */
+  isStale: boolean;
+  /** True when confidence / price > 0.01 (1% threshold) */
+  isConfidenceWide: boolean;
+  /** Pyth exponential moving average price */
+  emaPrice: number;
+  /** Absolute EMA confidence interval in USD */
+  emaConfidence: number;
+  metadata: PythSnapshotMetadata;
+  /** Raw string values from the Hermes API response before exponent scaling */
+  raw: PythSnapshotRaw;
+  /** When this snapshot was fetched from Hermes */
+  fetchedAt: string;
+}
+
 export type SignalDetail = Signal & {
   marketSnapshot?: MarketSnapshot;
   trendRegime?: TrendRegime;
@@ -682,6 +770,9 @@ export type SignalDetail = Signal & {
   /** SHA-256 content hash (first 16 hex chars) of the canonical normalized input packet. Same normalized input always produces the same hash — enabling deterministic identity and replay verification.
    */
   packetHash?: string;
+  /** Canonical Pyth Hermes v2 market snapshot captured at signal computation time. Provides secondary price context: symbol, feedId, price, confidence interval, staleness, and EMA price. Null when Pyth is unavailable. isStale and isConfidenceWide drive the PYTH_PRICE_CONTEXT audit check and UI warning styling.
+   */
+  pythSnapshot?: PythSnapshot | null;
 };
 
 export interface WatchlistEntry {
@@ -1344,6 +1435,23 @@ export interface PythPriceData {
   fresh: boolean;
   /** Whether this data is currently affecting processVerdict */
   influencesProcessVerdict: boolean;
+}
+
+/**
+ * Feed discovery metadata from the Pyth Hermes v2 /v2/price_feeds endpoint. Returned by /pyth/feeds and /pyth/feeds/{symbol}. feedId is the canonical 64-char hex identifier used in snapshot requests.
+
+ */
+export interface PythFeedInfo {
+  /** 64-char hex Pyth feed ID */
+  feedId: string;
+  /** Canonical trading pair symbol (e.g. BTC/USD) */
+  symbol: string;
+  /** Base asset ticker (e.g. BTC) */
+  asset: string;
+  /** Human-readable feed description from Pyth */
+  description: string;
+  /** Pyth asset type classification (e.g. crypto) */
+  assetType: string;
 }
 
 export type SubmitFindingRequestMarketType =

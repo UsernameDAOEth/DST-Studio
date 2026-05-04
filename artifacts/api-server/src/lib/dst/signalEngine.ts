@@ -14,7 +14,7 @@ import { lastEma, rsi, macd, atr } from "./indicators";
 import { normalizeInputs, hashPacket } from "./normalization";
 import { runFastPathVerification, type VerificationReport } from "./verification";
 import { getConstraints } from "../hermes/constraints";
-import { fetchPythPrice } from "../pyth/pythClient";
+import { fetchPythSnapshot, type PythSnapshot } from "../pyth/pythClient";
 import {
   type DataQualityReport,
   type QualityFlag,
@@ -159,6 +159,7 @@ export interface ComputedSignal {
   dataQuality: DataQualityReport;
   verificationReport: VerificationReport;
   packetHash: string;
+  pythSnapshot: PythSnapshot | null;
 }
 
 // ── Pure helper functions (unchanged) ─────────────────────────────────────────
@@ -185,7 +186,9 @@ function buildAuditChecks(
   tr: TrendRegime,
   oi: OIContext,
   direction: Direction,
-  prices: number[]
+  prices: number[],
+  pythSnapshot: PythSnapshot | null,
+  defillamaPrice: number,
 ): AuditCheck[] {
   const checks: AuditCheck[] = [];
 
@@ -254,6 +257,47 @@ function buildAuditChecks(
     weight: 0.1,
   });
 
+  // ── PYTH_PRICE_CONTEXT — secondary market price verifier ──────────────────
+  if (pythSnapshot === null) {
+    checks.push({
+      name: "PYTH_PRICE_CONTEXT",
+      result: "SKIP",
+      detail: "Pyth Hermes v2 price context unavailable. Secondary verification skipped.",
+      weight: 0.1,
+    });
+  } else if (pythSnapshot.isStale) {
+    checks.push({
+      name: "PYTH_PRICE_CONTEXT",
+      result: "WARN",
+      detail: `Pyth price stale (${pythSnapshot.stalenessSec.toFixed(0)}s old). Last: $${pythSnapshot.price.toFixed(2)} [${pythSnapshot.symbol}].`,
+      weight: 0.1,
+    });
+  } else if (pythSnapshot.isConfidenceWide) {
+    const divergencePct = defillamaPrice > 0
+      ? Math.abs(pythSnapshot.price - defillamaPrice) / defillamaPrice * 100
+      : 0;
+    checks.push({
+      name: "PYTH_PRICE_CONTEXT",
+      result: "WARN",
+      detail: `Pyth confidence wide: ±${pythSnapshot.confidencePct.toFixed(3)}% of price. DefiLlama divergence: ${divergencePct.toFixed(3)}%.`,
+      weight: 0.1,
+    });
+  } else {
+    const divergencePct = defillamaPrice > 0
+      ? Math.abs(pythSnapshot.price - defillamaPrice) / defillamaPrice * 100
+      : 0;
+    const diverges = divergencePct > 0.5;
+    checks.push({
+      name: "PYTH_PRICE_CONTEXT",
+      result: diverges ? "FAIL" : "PASS",
+      detail: diverges
+        ? `Pyth $${pythSnapshot.price.toFixed(2)} diverges ${divergencePct.toFixed(3)}% from DefiLlama $${defillamaPrice.toFixed(2)} (>0.5% threshold).`
+        : `Pyth $${pythSnapshot.price.toFixed(2)} confirms DefiLlama $${defillamaPrice.toFixed(2)} (divergence ${divergencePct.toFixed(3)}%). Confidence: ${pythSnapshot.confidenceStatus} (±${pythSnapshot.confidencePct.toFixed(3)}%).`,
+      weight: 0.1,
+    });
+  }
+
+  void prices;
   return checks;
 }
 
@@ -430,17 +474,19 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   const startMs = Date.now();
   logger.info({ asset, timeframe }, "Computing signal");
 
-  const [priceResult, histResult, tvlResult, globalResult] = await Promise.allSettled([
+  const [priceResult, histResult, tvlResult, globalResult, pythResult] = await Promise.allSettled([
     getCurrentPricesWithProvenance([asset]),
     getHistoricalPricesWithProvenance(asset, 200),
     getTvlForAssetWithProvenance(asset),
     getGlobalDerivativeData(),
+    fetchPythSnapshot(asset),
   ]);
 
   const priceData = priceResult.status === "fulfilled" ? priceResult.value[asset] : null;
   const histData = histResult.status === "fulfilled" ? histResult.value : null;
   const tvlData = tvlResult.status === "fulfilled" ? tvlResult.value : null;
   const globalData = globalResult.status === "fulfilled" ? globalResult.value : null;
+  const pythSnapshotData: PythSnapshot | null = pythResult.status === "fulfilled" ? pythResult.value : null;
 
   const currentPrice = priceData?.price ?? 0;
   const hist: HistoricalPrice[] = histData?.prices ?? [];
@@ -478,6 +524,12 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   qualityFlags.push("SYNTHETIC_OI");
   qualityFlags.push("SYNTHETIC_FUNDING");
   qualityFlags.push("VOLUME_MISSING");
+
+  // Pyth quality flags — derived from early-fetched snapshot
+  if (pythSnapshotData !== null) {
+    if (pythSnapshotData.isStale) qualityFlags.push("PYTH_STALE");
+    if (pythSnapshotData.isConfidenceWide) qualityFlags.push("PYTH_CONFIDENCE_WIDE");
+  }
 
   // ── Price change calculation ────────────────────────────────────────────────
   const prev24Price = priceSeries.length > 6 ? priceSeries[priceSeries.length - 7] : currentPrice;
@@ -627,6 +679,9 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     targetZone,
     invalidationPrice,
     rrRatio,
+    pythPrice: pythSnapshotData?.price ?? null,
+    pythConfidencePct: pythSnapshotData?.confidencePct ?? null,
+    pythFeedId: pythSnapshotData?.feedId ?? null,
   });
   const packetHash = hashPacket(normalizedPacket);
 
@@ -668,71 +723,72 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   let finalProcessVerdict = computeProcessVerdict(rejectionCodes, entryQuality, "ADMISSIBLE", narrativeRisk, rrRatio);
   let whyTrade = generateWhyTrade(direction, finalProcessVerdict, rejectionCodes, setupFamily, rrRatio, entryQuality);
 
-  // ── Pyth secondary verifier (scaffolded) ───────────────────────────────────
+  // ── Pyth secondary verifier ─────────────────────────────────────────────────
+  // Uses the snapshot already fetched in the initial allSettled batch.
+  // pythSnapshotData = null if Pyth was unreachable at compute time.
   let pythVerifier: PythVerifierResult;
 
   if (!constraints.pythConfidenceFilter) {
     pythVerifier = makePythVerifierSkipped();
+  } else if (!pythSnapshotData) {
+    pythVerifier = makePythVerifierUnavailable();
+    qualityFlags.push("PYTH_UNAVAILABLE");
   } else {
-    const pythData = await fetchPythPrice(asset).catch(() => null);
-    if (!pythData) {
-      pythVerifier = makePythVerifierUnavailable();
+    const snap = pythSnapshotData;
+    const divergencePct = currentPrice > 0
+      ? Math.abs(snap.price - currentPrice) / currentPrice * 100
+      : null;
+    const hasDivergence = divergencePct != null && divergencePct > 0.5;
+    const confidenceRatio = snap.price > 0 ? snap.confidence / snap.price : 1;
+
+    if (hasDivergence) qualityFlags.push("CONFLICTING_PRICES");
+
+    let pythVerdict: PythVerifierResult["verdict"] = "CONFIRMS";
+    let verdictDetail = `Pyth $${snap.price.toFixed(2)} vs DefiLlama $${currentPrice.toFixed(2)}.`;
+
+    if (snap.isStale) {
+      pythVerdict = "UNAVAILABLE";
+      verdictDetail += ` Stale: ${snap.stalenessSec.toFixed(0)}s since publish.`;
       qualityFlags.push("PYTH_UNAVAILABLE");
+    } else if (hasDivergence) {
+      pythVerdict = "DIVERGES";
+      verdictDetail += ` Divergence ${divergencePct!.toFixed(2)}% exceeds 0.5% threshold.`;
+      qualityFlags.push("PYTH_DIVERGENCE");
     } else {
-      const divergencePct = currentPrice > 0
-        ? Math.abs(pythData.price - currentPrice) / currentPrice * 100
-        : null;
-      const hasDivergence = divergencePct != null && divergencePct > 0.5;
-      const isStale = !pythData.fresh;
+      verdictDetail += ` Divergence ${divergencePct != null ? divergencePct.toFixed(3) : "n/a"}% within threshold. Confidence: ${snap.confidenceStatus} (±${snap.confidencePct.toFixed(3)}%).`;
+    }
 
-      if (hasDivergence) qualityFlags.push("CONFLICTING_PRICES");
+    pythVerifier = {
+      scaffolded: true,
+      checked: true,
+      pythPrice: snap.price,
+      defillamaPrice: currentPrice,
+      priceDivergencePct: divergencePct,
+      confidenceRatio,
+      confidenceStatus: snap.confidenceStatus,
+      fresh: !snap.isStale,
+      verdict: pythVerdict,
+      verdictDetail,
+      influencesProcessVerdict: constraints.pythConfidenceFilter,
+      provenance: makeProvenance(
+        "PYTH_HERMES",
+        new Date(),
+        new Date(snap.publishTime).getTime(),
+        60000,
+        false,
+      ),
+    };
 
-      let pythVerdict: PythVerifierResult["verdict"] = "CONFIRMS";
-      let verdictDetail = `Pyth price $${pythData.price.toFixed(2)} vs DefiLlama $${currentPrice.toFixed(2)}.`;
-
-      if (isStale) {
-        pythVerdict = "UNAVAILABLE";
-        verdictDetail += " Pyth data is stale (>30s old).";
-        qualityFlags.push("PYTH_UNAVAILABLE");
-      } else if (hasDivergence) {
-        pythVerdict = "DIVERGES";
-        verdictDetail += ` Divergence ${divergencePct!.toFixed(2)}% exceeds 0.5% threshold.`;
-      } else {
-        verdictDetail += ` Divergence ${divergencePct != null ? divergencePct.toFixed(3) : "n/a"}% within threshold.`;
+    // Confidence filter — degrade verdict when confidence is below threshold
+    if (confidenceRatio > (1 - constraints.pythConfidenceThreshold)) {
+      if (!rejectionCodes.includes("CONFIDENCE_STRUCTURE_MISMATCH")) {
+        rejectionCodes.push("CONFIDENCE_STRUCTURE_MISMATCH");
       }
-
-      pythVerifier = {
-        scaffolded: true,
-        checked: true,
-        pythPrice: pythData.price,
-        defillamaPrice: currentPrice,
-        priceDivergencePct: divergencePct,
-        confidenceRatio: pythData.confidenceRatio,
-        confidenceStatus: pythData.confidenceStatus,
-        fresh: pythData.fresh,
-        verdict: pythVerdict,
-        verdictDetail,
-        influencesProcessVerdict: constraints.pythConfidenceFilter,
-        provenance: makeProvenance(
-          "PYTH_HERMES",
-          new Date(),
-          new Date(pythData.publishTime).getTime(),
-          30000,
-          false,
-        ),
-      };
-
-      // Confidence filter (existing logic)
-      if (pythData.confidenceRatio > (1 - constraints.pythConfidenceThreshold)) {
-        if (!rejectionCodes.includes("CONFIDENCE_STRUCTURE_MISMATCH")) {
-          rejectionCodes.push("CONFIDENCE_STRUCTURE_MISMATCH");
-        }
-        if (finalProcessVerdict === "APPROVED") {
-          finalProcessVerdict = "DEGRADED";
-        }
-        qualityFlags.push("LOW_CONFIDENCE");
-        whyTrade += ` Pyth confidence LOW (ratio: ${pythData.confidenceRatio.toFixed(4)}).`;
+      if (finalProcessVerdict === "APPROVED") {
+        finalProcessVerdict = "DEGRADED";
       }
+      qualityFlags.push("LOW_CONFIDENCE");
+      whyTrade += ` Pyth confidence ${snap.confidenceStatus} (±${snap.confidencePct.toFixed(3)}%).`;
     }
   }
 
@@ -750,7 +806,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   });
 
   // ── DJZS audit ──────────────────────────────────────────────────────────────
-  const checks = buildAuditChecks(trendRegime, oiContext, direction, priceSeries);
+  const checks = buildAuditChecks(trendRegime, oiContext, direction, priceSeries, pythSnapshotData, currentPrice);
   const { verdict: auditVerdict, summary: auditSummary } = computeVerdict(checks);
   const logicAdmissibility = computeLogicAdmissibility(finalProcessVerdict, auditVerdict, rejectionCodes);
   const processQualityGrade = computeProcessGrade(finalProcessVerdict, logicAdmissibility, entryQuality, narrativeRisk, rrRatio, rejectionCodes);
@@ -852,6 +908,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     dataQuality,
     verificationReport,
     packetHash,
+    pythSnapshot: pythSnapshotData,
   };
 }
 

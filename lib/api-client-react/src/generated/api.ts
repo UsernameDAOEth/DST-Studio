@@ -46,7 +46,9 @@ import type {
   HermesWorker,
   IntegrationStatus,
   MarketSnapshot,
+  PythFeedInfo,
   PythPriceData,
+  PythSnapshot,
   Signal,
   SignalDetail,
   SignalFeedEntry,
@@ -3020,6 +3022,338 @@ export function useGetPythPriceByAsset<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPythPriceByAssetQueryOptions(asset, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Queries the Pyth Hermes v2 /v2/price_feeds endpoint for each known symbol (BTC/USD, ETH/USD). Returns feed metadata including feedId, description, and asset type. Results reflect live Hermes discovery — add new symbols by extending the server-side registry.
+
+ * @summary Discover all registered Pyth v2 price feeds for tracked symbols
+ */
+export const getGetPythFeedsUrl = () => {
+  return `/api/pyth/feeds`;
+};
+
+export const getPythFeeds = async (
+  options?: RequestInit,
+): Promise<PythFeedInfo[]> => {
+  return customFetch<PythFeedInfo[]>(getGetPythFeedsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPythFeedsQueryKey = () => {
+  return [`/api/pyth/feeds`] as const;
+};
+
+export const getGetPythFeedsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPythFeeds>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPythFeeds>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPythFeedsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPythFeeds>>> = ({
+    signal,
+  }) => getPythFeeds({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPythFeeds>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPythFeedsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPythFeeds>>
+>;
+export type GetPythFeedsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Discover all registered Pyth v2 price feeds for tracked symbols
+ */
+
+export function useGetPythFeeds<
+  TData = Awaited<ReturnType<typeof getPythFeeds>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPythFeeds>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPythFeedsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Discover Pyth v2 feed for a specific symbol
+ */
+export const getGetPythFeedBySymbolUrl = (symbol: string) => {
+  return `/api/pyth/feeds/${symbol}`;
+};
+
+export const getPythFeedBySymbol = async (
+  symbol: string,
+  options?: RequestInit,
+): Promise<PythFeedInfo> => {
+  return customFetch<PythFeedInfo>(getGetPythFeedBySymbolUrl(symbol), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPythFeedBySymbolQueryKey = (symbol: string) => {
+  return [`/api/pyth/feeds/${symbol}`] as const;
+};
+
+export const getGetPythFeedBySymbolQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPythFeedBySymbol>>,
+  TError = ErrorType<void>,
+>(
+  symbol: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPythFeedBySymbol>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPythFeedBySymbolQueryKey(symbol);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPythFeedBySymbol>>
+  > = ({ signal }) =>
+    getPythFeedBySymbol(symbol, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!symbol,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPythFeedBySymbol>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPythFeedBySymbolQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPythFeedBySymbol>>
+>;
+export type GetPythFeedBySymbolQueryError = ErrorType<void>;
+
+/**
+ * @summary Discover Pyth v2 feed for a specific symbol
+ */
+
+export function useGetPythFeedBySymbol<
+  TData = Awaited<ReturnType<typeof getPythFeedBySymbol>>,
+  TError = ErrorType<void>,
+>(
+  symbol: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPythFeedBySymbol>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPythFeedBySymbolQueryOptions(symbol, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns normalized PythSnapshot packets for all registered assets. Each packet includes provider, feedId, symbol, price, confidence, confidencePct, expo, publishTime, stalenessSec, emaPrice, metadata, and raw payload. isStale is true when publishTime > 60s ago. isConfidenceWide is true when confidence > 1% of price.
+
+ * @summary Get canonical Pyth v2 market snapshots for all tracked assets
+ */
+export const getGetPythSnapshotsUrl = () => {
+  return `/api/pyth/snapshot`;
+};
+
+export const getPythSnapshots = async (
+  options?: RequestInit,
+): Promise<PythSnapshot[]> => {
+  return customFetch<PythSnapshot[]>(getGetPythSnapshotsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPythSnapshotsQueryKey = () => {
+  return [`/api/pyth/snapshot`] as const;
+};
+
+export const getGetPythSnapshotsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPythSnapshots>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPythSnapshots>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPythSnapshotsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPythSnapshots>>
+  > = ({ signal }) => getPythSnapshots({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPythSnapshots>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPythSnapshotsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPythSnapshots>>
+>;
+export type GetPythSnapshotsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get canonical Pyth v2 market snapshots for all tracked assets
+ */
+
+export function useGetPythSnapshots<
+  TData = Awaited<ReturnType<typeof getPythSnapshots>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPythSnapshots>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPythSnapshotsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get canonical Pyth v2 market snapshot for a specific asset
+ */
+export const getGetPythSnapshotBySymbolUrl = (symbol: string) => {
+  return `/api/pyth/snapshot/${symbol}`;
+};
+
+export const getPythSnapshotBySymbol = async (
+  symbol: string,
+  options?: RequestInit,
+): Promise<PythSnapshot> => {
+  return customFetch<PythSnapshot>(getGetPythSnapshotBySymbolUrl(symbol), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPythSnapshotBySymbolQueryKey = (symbol: string) => {
+  return [`/api/pyth/snapshot/${symbol}`] as const;
+};
+
+export const getGetPythSnapshotBySymbolQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPythSnapshotBySymbol>>,
+  TError = ErrorType<void>,
+>(
+  symbol: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPythSnapshotBySymbol>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPythSnapshotBySymbolQueryKey(symbol);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPythSnapshotBySymbol>>
+  > = ({ signal }) =>
+    getPythSnapshotBySymbol(symbol, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!symbol,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPythSnapshotBySymbol>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPythSnapshotBySymbolQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPythSnapshotBySymbol>>
+>;
+export type GetPythSnapshotBySymbolQueryError = ErrorType<void>;
+
+/**
+ * @summary Get canonical Pyth v2 market snapshot for a specific asset
+ */
+
+export function useGetPythSnapshotBySymbol<
+  TData = Awaited<ReturnType<typeof getPythSnapshotBySymbol>>,
+  TError = ErrorType<void>,
+>(
+  symbol: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPythSnapshotBySymbol>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPythSnapshotBySymbolQueryOptions(symbol, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
