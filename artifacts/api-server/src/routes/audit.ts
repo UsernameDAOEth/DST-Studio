@@ -1,9 +1,8 @@
 import { Router } from "express";
 import { GetAuditByAssetParams } from "@workspace/api-zod";
-import { computeSignal } from "../lib/dst/signalEngine";
 import { ASSET_MAP } from "../lib/dst/defillamaClient";
 import { db, signalsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -43,8 +42,19 @@ router.get("/:asset", async (req, res) => {
     return;
   }
 
-  const signal = await computeSignal(asset);
-  res.json(signal.auditReport);
+  const [latest] = await db
+    .select()
+    .from(signalsTable)
+    .where(eq(signalsTable.asset, asset))
+    .orderBy(desc(signalsTable.computedAt))
+    .limit(1);
+
+  if (latest) {
+    res.json(latest.auditReport);
+    return;
+  }
+
+  res.status(404).json({ error: `No stored signal for ${asset}. Trigger a scan first.` });
 });
 
 export default router;

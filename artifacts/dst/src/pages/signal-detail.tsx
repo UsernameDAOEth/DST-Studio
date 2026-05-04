@@ -173,7 +173,7 @@ export default function SignalDetail() {
                   "text-xs font-mono mono-nums",
                   marketSnapshot.priceChangePct24h >= 0 ? "text-primary" : "text-destructive"
                 )}>
-                  {marketSnapshot.priceChangePct24h >= 0 ? "+" : ""}{formatPercent(marketSnapshot.priceChangePct24h)} 24H
+                  {formatPercent(marketSnapshot.priceChangePct24h)} 24H
                 </div>
               )}
             </div>
@@ -210,10 +210,10 @@ export default function SignalDetail() {
           <div className="p-4">
             <div className="flex items-center gap-3 mb-3">
               <ProcessVerdictBadge verdict={signal.processVerdict} />
-              <RRRatioBadge ratio={signal.rrRatio} />
+              {!isWait && <RRRatioBadge ratio={signal.rrRatio} />}
             </div>
             <div className="flex flex-wrap gap-2 mb-3">
-              <EntryQualityBadge quality={signal.entryQuality} />
+              <EntryQualityBadge quality={signal.entryQuality} overridden={signal.processVerdict === "REJECTED"} />
               <NarrativeRiskBadge risk={signal.narrativeRisk} />
             </div>
             <div className="font-mono text-[9px] text-muted-foreground/60 uppercase tracking-wide leading-relaxed">
@@ -264,7 +264,7 @@ export default function SignalDetail() {
             />
             <PacketField
               label="R/R RATIO"
-              value={signal.rrRatio > 0 ? `${signal.rrRatio.toFixed(1)}x` : "—"}
+              value={!isWait && signal.rrRatio > 0 ? `${signal.rrRatio.toFixed(1)}x` : "—"}
               accent={
                 isWait ? "muted" :
                 signal.rrRatio >= 2 ? "long" :
@@ -345,7 +345,7 @@ export default function SignalDetail() {
                 <div className="flex justify-between items-center">
                   <span className="micro-label">24H CHANGE</span>
                   <span className={cn("text-xs font-mono font-bold mono-nums", marketSnapshot.priceChangePct24h >= 0 ? "text-primary" : "text-destructive")}>
-                    {marketSnapshot.priceChangePct24h >= 0 ? "+" : ""}{formatPercent(marketSnapshot.priceChangePct24h)}
+                    {formatPercent(marketSnapshot.priceChangePct24h)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -435,7 +435,6 @@ export default function SignalDetail() {
                   <span className={cn("text-xs font-mono mono-nums font-bold",
                     openInterestContext.oiChangePct24h && openInterestContext.oiChangePct24h > 0 ? "text-primary" : "text-destructive"
                   )}>
-                    {openInterestContext.oiChangePct24h && openInterestContext.oiChangePct24h > 0 ? "+" : ""}
                     {formatPercent(openInterestContext.oiChangePct24h)}
                   </span>
                 </div>

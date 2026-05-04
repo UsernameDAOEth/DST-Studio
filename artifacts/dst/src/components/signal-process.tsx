@@ -73,8 +73,11 @@ export function SetupFamilyLabel({ family }: { family?: string }) {
   return <span className="text-muted-foreground font-mono text-[10px] uppercase tracking-wider">{family}</span>;
 }
 
-export function EntryQualityBadge({ quality }: { quality?: string }) {
+export function EntryQualityBadge({ quality, overridden }: { quality?: string; overridden?: boolean }) {
   if (!quality) return null;
+  if (overridden) {
+    return <span className="chip-skip opacity-50 line-through">{quality}</span>;
+  }
   if (quality === "OPTIMAL") return <span className="chip-pass">OPTIMAL</span>;
   if (quality === "ACCEPTABLE") return <span className="chip-neutral">ACCEPTABLE</span>;
   if (quality === "LATE") return <span className="chip-warn">LATE</span>;
@@ -141,8 +144,18 @@ export function ProcessGradeBadge({ grade }: { grade?: string }) {
         </TooltipContent>
       </Tooltip>
       {grade === "F" && (
-        <span className="font-mono text-[9px] text-destructive/70 uppercase tracking-wider max-w-[200px] leading-tight">
-          HARD RULE FAILURE — NO SETUP PASSED AUDIT
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[9px] text-destructive font-bold uppercase tracking-wider leading-tight">
+            HARD RULE FAILURE
+          </span>
+          <span className="font-mono text-[8px] text-destructive/60 uppercase tracking-wider max-w-[200px] leading-tight">
+            NO SETUP PASSED AUDIT — ONE OR MORE EXECUTION RULES FAILED
+          </span>
+        </div>
+      )}
+      {grade === "D" && (
+        <span className="font-mono text-[8px] text-destructive/60 uppercase tracking-wider max-w-[200px] leading-tight">
+          DEGRADED — SOFT FAILURES DETECTED
         </span>
       )}
     </div>
@@ -150,7 +163,7 @@ export function ProcessGradeBadge({ grade }: { grade?: string }) {
 }
 
 export function RRRatioBadge({ ratio }: { ratio?: number }) {
-  if (ratio === undefined || ratio === null) return null;
+  if (ratio === undefined || ratio === null || ratio <= 0) return null;
   const colorClass =
     ratio >= 2 ? "text-primary" :
     ratio >= 1.5 ? "text-[hsl(var(--trade-wait))]" :
@@ -308,10 +321,22 @@ export function WaitDecisionPanel({
   return null;
 }
 
+function gateDisplayVerdict(admissibility?: string): string | undefined {
+  if (admissibility === "ADMISSIBLE") return "PASS";
+  if (admissibility === "CONDITIONAL") return "WAIT";
+  if (admissibility === "INADMISSIBLE") return "FAIL";
+  return admissibility;
+}
+
+export { gateDisplayVerdict };
+
 export function DjzsGateBadge({ verdict, admissibility }: { verdict?: string; admissibility?: string }) {
-  const v = verdict || "";
-  const isPass = VERDICT_PASS.includes(v);
-  const isFail = VERDICT_FAIL.includes(v);
+  const displayVerdict = gateDisplayVerdict(admissibility) || verdict || "";
+  const isPass = VERDICT_PASS.includes(displayVerdict);
+  const isFail = VERDICT_FAIL.includes(displayVerdict);
+
+  const auditPassedButGateRejected =
+    verdict && VERDICT_PASS.includes(verdict) && admissibility === "INADMISSIBLE";
 
   return (
     <div className={cn(
@@ -328,13 +353,13 @@ export function DjzsGateBadge({ verdict, admissibility }: { verdict?: string; ad
         <AlertTriangle className="w-4 h-4 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
       )}
       <div className="flex-1">
-        <div className="micro-label mb-1.5">DJZS AUDIT VERDICT</div>
+        <div className="micro-label mb-1.5">DJZS GATE VERDICT</div>
         <div className="mt-1">
-          <VerdictBadge value={verdict} size="lg" />
+          <VerdictBadge value={displayVerdict} size="lg" />
         </div>
-        {admissibility && (
-          <div className="mt-2">
-            <VerdictBadge value={admissibility} />
+        {auditPassedButGateRejected && (
+          <div className="mt-2 font-mono text-[9px] text-destructive/60 uppercase tracking-wider leading-relaxed">
+            TECHNICAL AUDIT CHECKS: PASS — REJECTED BY PROCESS RULES
           </div>
         )}
         <div className="micro-label text-muted-foreground/50 mt-2.5 leading-relaxed normal-case text-[9px] uppercase tracking-wider">

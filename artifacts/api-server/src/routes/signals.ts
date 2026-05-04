@@ -89,6 +89,7 @@ function mapSignalRow(row: typeof signalsTable.$inferSelect) {
     invalidationPrice: row.invalidationPrice ? Number(row.invalidationPrice) : undefined,
     reasonCodes: row.reasonCodes ?? [],
     computedAt: row.computedAt.toISOString(),
+    dataQuality: row.dataQuality,
   };
 }
 
@@ -117,11 +118,12 @@ router.get("/feed", async (req, res) => {
       asset: r.asset,
       direction: r.direction,
       verdict: r.verdictDjzs,
+      logicAdmissibility: r.logicAdmissibility,
       processVerdict: r.processVerdict,
       setupFamily: r.setupFamily,
       confidence: Number(r.confidence),
       rrRatio: Number(r.rrRatio),
-      summary: `${r.asset} ${r.direction} — DJZS ${r.verdictDjzs} — Confidence ${Number(r.confidence).toFixed(0)}%`,
+      summary: `${r.asset} ${r.direction} — DJZS ${r.logicAdmissibility === "ADMISSIBLE" ? "PASS" : r.logicAdmissibility === "CONDITIONAL" ? "WAIT" : r.logicAdmissibility === "INADMISSIBLE" ? "FAIL" : r.verdictDjzs} — Confidence ${Number(r.confidence).toFixed(0)}%`,
       computedAt: r.computedAt.toISOString(),
     }))
   );

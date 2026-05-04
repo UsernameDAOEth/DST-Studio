@@ -1,153 +1,77 @@
-# Workspace
+# Overview
 
-## Overview
+DST (Deterministic Signal Trader) is an audit-first signal system designed as a pre-trade audit layer for perp traders. Its primary purpose is to provide deterministic signals for potential trades and ensure they pass a rigorous audit process (DJZS) before execution. DST focuses on disciplined pre-trade analysis, integrating evidence and providing clear, machine-readable audit verdicts, with "WAIT" being a common and correct outcome when no setup meets the audit threshold.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+Key capabilities include:
+- **Signal Generation**: Identifying potential trade setups.
+- **Deterministic Audit (DJZS)**: Rigorous, immutable auditing of trade setups with machine-readable rejection codes and process quality grades.
+- **Orchestration (Hermes)**: Manages the scan loop, enforces constraints, and tracks metrics for the entire system.
+- **Data Quality Hardening**: Focus on data provenance, quality reports, and validation during signal processing.
 
-## Stack
+DST is not a charting platform, execution venue, or general intelligence dashboard; it is a specialized tool for pre-trade audit and signal generation.
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
+# User Preferences
+
+I prefer concise and direct communication. When making changes, prioritize iterative development and clear explanations of the rationale. Before implementing major architectural changes or introducing new dependencies, please ask for confirmation. I value code that is clean, modular, and follows TypeScript best practices. Avoid making changes to the `.vscode` folder.
+
+# System Architecture
+
+The project is a pnpm workspace monorepo built with Node.js 24 and TypeScript 5.9.
+
+**Core Architectural Decisions:**
+- **Monorepo Structure**: pnpm workspaces manage multiple packages (`@workspace/api-spec`, `@workspace/db`, `@workspace/api-server`, `artifacts/dst`).
+- **API**: Express 5 serves as the backend API.
+- **Database**: PostgreSQL with Drizzle ORM for schema management and data interaction.
+- **Validation**: Zod for robust data validation across the system, including `drizzle-zod`.
+- **API Codegen**: Orval is used to generate API hooks and Zod schemas from an OpenAPI specification, ensuring type safety and consistency between frontend and backend.
+- **Build System**: esbuild is used for CJS bundle compilation.
+- **Audit-First Design**: The core philosophy dictates that all trade signals must pass a deterministic audit layer (DJZS) before being presented.
+- **Modularity**: Separation of concerns into distinct modules like Signal Engine, Quality Model, Hermes Module, Pyth Client, and Agent Interpreter.
+
+**UI/UX Decisions (Frontend - `artifacts/dst`):**
+- **Design Philosophy**: Terminal brutalist UI.
+- **Typography**: Exclusively JetBrains Mono.
+- **Color Palette**: Near-black background (`#070A0D`), with accent colors for different states: green (`#84CC16`), amber (`#F59E0B`), and red (`#F23030`).
+- **Styling**: No border-radius, restrained green glow on active elements. Utilizes `terminal-panel`, `terminal-panel-header`, `micro-label`, `glow-green` utility classes.
+- **Components**: `VerdictBadge` for unified signal status display, `ProcessGradeBadge` with inline explanations (F-grade: HARD RULE FAILURE, D-grade: DEGRADED note), `DjzsGateBadge` derives display verdict from `logicAdmissibility` (ADMISSIBLE→PASS, CONDITIONAL→WAIT, INADMISSIBLE→FAIL), `EntryQualityBadge` with `overridden` prop for line-through when REJECTED, `gateDisplayVerdict` helper exported for dashboard/feed use. Pipeline health chips (`DataGradeChip`, `PipelineChips`) show data quality flags on dashboard cards.
+- **Navigation**: Dedicated pages for Dashboard, Signal Details, Audit Reports, Watchlist, Alerts, Agent Chat, Integrations, Hermes Operations Console, and Evaluation.
+
+**Technical Implementations:**
+- **Signal Engine**: Enforces the full pre-trade process, reading HermesConstraints and incorporating `DataQualityReport` and data guards. Computes technical indicators (EMA, RSI, MACD, ATR) from 4H historical data.
+- **Quality Model**: Defines canonical data quality types including `DataProvenance`, `DataQualityReport`, `QualityFlag`, and `PythVerifierResult`.
+- **Hermes Module**:
+    - **Constraints**: System constraints (timeframe, R/R, Pyth filter, wait bias) persisted to `/tmp/hermes-constraints.json`.
+    - **Scan Loop**: Manages scan triggers, job tracking, and in-memory statistics.
+    - **Metrics**: DB-backed computation of wait rate, approval rate, rejection breakdown.
+    - **Evaluation**: Weekly policy evaluation with parameter recommendations.
+    - **Findings Ingress**: Protected endpoint for submitting findings, validated by Zod, persisted to `hermes_findings` DB table, with content hashing for deduplication.
+    - **Kanban Board**: In-memory operational console for tracking workflow tasks (SCAN_CREATE, FETCH_MARKET_CONTEXT, VERIFY_PRICE_STATE, COLLECT_HERMES_FINDINGS, COMPRESS_EVIDENCE, ATTACH_TO_AUDIT, ROUTE_RESULT) with retry mechanisms and blocked-state propagation.
+- **Pyth Client**: Integrates with Hermes REST API for secondary price-confidence verification.
+- **DefiLlama Client**: Hardened data ingestion with `NormalizedPriceResult`, `NormalizedHistoryResult`, stale thresholds, and fallback flags.
+- **Agent Interpreter**: Processes chat commands for system interaction.
+- **DB Schema**: `signals` table includes `data_quality` jsonb column and comprehensive trade-related data. `hermes_findings` table stores audit findings.
+
+**Feature Specifications:**
+- **Rejection Codes**: Granular codes for various audit failures (e.g., `NO_REGIME`, `ENTRY_TOO_LATE`, `RR_BELOW_THRESHOLD`).
+- **Pre-trade Checklist**: Automated checklist generation for each signal, covering thesis, regime, entry, invalidation, target, reason codes.
+- **Snapshot Integrity**: Audit endpoint (`GET /api/audit/:asset`) uses latest stored signal's audit report (ordered by `computedAt DESC`), never recomputes independently. Returns 404 if no stored signal exists.
+- **API Routes**: Comprehensive API for signals, market data, audit reports, watchlist, alerts, agent chat, integrations, and Hermes operations (status, constraints, scan, jobs, metrics, findings, evaluation). Signal list endpoint includes `dataQuality` in response. Signal feed includes `logicAdmissibility` and gate-aware summary text.
+
+# External Dependencies
+
+- **API Framework**: Express 5
+- **Database**: PostgreSQL
+- **ORM**: Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
-
-## Key Commands
-
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
-
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
-
-## DST — Deterministic Signal Trader (Phase 5 — Data Quality Hardening)
-
-### Purpose
-DST is an **audit-first signal system** — a deterministic pre-trade audit layer for perp traders. It does not replace charting tools (TradingView) or execution venues (Hyperliquid). It replaces the undisciplined part of the pre-trade process. DST signals possible trades. DJZS audits whether they are admissible. Hermes runs the system. WAIT is not a failure state — it is the correct outcome when no setup passes the audit threshold.
-
-**Roles (canonical):** DST = Deterministic Signal Trading (finds possible trades). DJZS = Audit layer (audits setups for admissibility — deterministic, never overridden). Hermes = Runtime (scan loop, constraints, routing).
-**DST is NOT:** a charting platform, an execution venue, a signal subscription service, or a general-purpose intelligence dashboard.
-**DST IS:** an audit-first signal system. DJZS audits setups — rules them in or out with machine-readable rejection codes and an immutable process quality grade. WAIT is the most common and most correct output.
-
-### Architecture
-- **Frontend** (`artifacts/dst`): React + Vite terminal brutalist UI — JetBrains Mono throughout, near-black #070A0D, green #84CC16, amber #F59E0B, red #F23030. No Space Grotesk. No border-radius. Restrained green glow on active elements. `terminal-panel`, `terminal-panel-header`, `micro-label`, `glow-green` utilities in index.css.
-- **Backend** (`artifacts/api-server`): Express API at `/api`
-- **Signal Engine** (`artifacts/api-server/src/lib/dst/signalEngine.ts`): Full pre-trade process enforcement, reads HermesConstraints, now includes DataQualityReport + data guards
-- **Quality Model** (`artifacts/api-server/src/lib/quality/types.ts`): Canonical data-quality types — DataProvenance, DataQualityReport, QualityFlag, PythVerifierResult
-- **Hermes Module** (`artifacts/api-server/src/lib/hermes/`): Orchestration runtime — constraints, scan loop, metrics, evaluation
-- **Pyth Client** (`artifacts/api-server/src/lib/pyth/pythClient.ts`): Secondary price-confidence verifier via Hermes REST API (free, no key). Scaffolded as CONFIRMS/DIVERGES/UNAVAILABLE/SKIPPED verifier.
-- **Integration Registry** (`artifacts/api-server/src/lib/integrations/registry.ts`): 7 scaffolded integration stubs
-- **DefiLlama Client** (`artifacts/api-server/src/lib/dst/defillamaClient.ts`): Hardened ingestion with provenance — `NormalizedPriceResult`, `NormalizedHistoryResult`, stale thresholds, fallback flags
-- **Agent Interpreter** (`artifacts/api-server/src/lib/dst/agentInterpreter.ts`): Chat command processing
-- **Database**: PostgreSQL — signals, watchlist, alerts tables. signals table now has `data_quality` jsonb column (Phase 5).
-
-### Hermes Module — Phase 3 (complete)
-- `constraints.ts` — system constraints (timeframe, R/R threshold, Pyth filter, alert routing, wait bias policy). Persisted to `/tmp/hermes-constraints.json`
-- `scan.ts` — scan trigger, job tracking, in-memory stats (totalScansToday, totalApprovedToday, totalWaitToday)
-- `metrics.ts` — DB-backed metrics computation (24H/7D/30D): wait rate, approval rate, rejection code breakdown, setup family breakdown
-- `evaluation.ts` — weekly policy evaluation report with per-parameter recommendations (KEEP/TIGHTEN/LOOSEN/REVIEW)
-- `findings.ts` — evidence ingress: SubmitFindingSchema (Zod), ingestFinding(), getFindingsForTarget(), getRecentFindings(), adaptFindingsToAuditContext(), BOUNDARY_REMINDER constant
-- `types.ts` — local type definitions (HermesConstraints, HermesJob, HermesMetrics, HermesEvaluation, PythPriceData, EvalReviewItem)
-- `board.ts` — Hermes Kanban runtime board (in-memory, max 50 runs). Task chain: SCAN_CREATE → FETCH_MARKET_CONTEXT → VERIFY_PRICE_STATE → COLLECT_HERMES_FINDINGS → COMPRESS_EVIDENCE → ATTACH_TO_AUDIT → ROUTE_RESULT. Workers: mcw-1 (market-context), pvw-1 (price-verifier), eiw-1 (evidence-ingress), arw-1 (alert-router). Task statuses: TRIAGE, READY, IN_PROGRESS, BLOCKED, DONE, FAILED. Blocked-state propagation on failure. Retry support (up to max_retries per task type). DJZS verdict read-only from ATTACH_TO_AUDIT — board has no audit authority.
-
-### Hermes Kanban Board — Operations Console (Phase 3 extension)
-Authority boundary: Kanban coordinates workflow and evidence movement only. Workers gather and hand off evidence. DJZS at ATTACH_TO_AUDIT is deterministic — board cannot influence, score, or override verdicts.
-- **Frontend**: `artifacts/dst/src/components/hermes-board.tsx` — operations console with worker chips, system health, 6-lane kanban (TRIAGE/READY/IN_PROGRESS/BLOCKED/DONE/FAILED), recent runs list, run detail panel with DJZS verdict summary, retry controls. Polls board every 2.5s.
-- **Hermes page tabs**: OPERATIONS BOARD (default) | RUNTIME CONFIG — tab switcher at `/hermes`
-- **API routes**: `GET /api/hermes/board`, `GET/POST /api/hermes/runs`, `GET /api/hermes/runs/:runId`, `POST /api/hermes/runs/:runId/tasks/:taskId/retry`, `GET /api/hermes/workers`
-- **Task dependency chain**: FETCH_MARKET_CONTEXT, VERIFY_PRICE_STATE, COLLECT_HERMES_FINDINGS run in parallel after SCAN_CREATE; COMPRESS_EVIDENCE waits for all three; ATTACH_TO_AUDIT waits for COMPRESS; ROUTE_RESULT waits for ATTACH.
-- **Blocked state**: When a task fails and exceeds max_retries, all downstream tasks enter BLOCKED status with explicit blocked_reason. Retry re-queues task and clears blocked downstream.
-
-### Hermes Findings Ingress — Phase 3 Architecture
-Boundary doctrine is enforced at every layer:
-- **POST /api/hermes/findings** — protected ingress. Accepts SubmitFindingRequest, validates via Zod, persists to `hermes_findings` DB table, returns `SubmitFindingAccepted` with BOUNDARY_REMINDER in every response.
-- **GET /api/hermes/findings** — recent findings log (up to 100)
-- **GET /api/hermes/findings/:target** — active findings for an asset (used in signal-detail hermesContext section)
-- **`hermes_findings` DB table** — findingId, runId, sourceAgent, marketType, target, observationType, summary, evidence (jsonb), confidence (numeric metadata, never used for scoring), suggestedFlags, status (ACTIVE/EXPIRED/DISMISSED), expiresAt, contentHash (sha256 dedup key — target+observationType+summary)
-- **Findings dedup**: sha256 content hash on (target, observationType, summary). Checks for matching hash within same runId or 5-minute window before inserting. Best-effort (application-level, no DB unique constraint).
-- **BOUNDARY_REMINDER** (constant): "HERMES SUBMITS FINDINGS ONLY. Confidence is metadata — not a score. Suggested flags are hints — not verdicts. DJZS is the deterministic audit gate. Capital movement requires the user's decision."
-
-### Codegen Pipeline
-- `lib/api-spec/fix-api-zod-index.mjs` — post-codegen fixup that strips phantom `api.schemas` exports and resolves duplicate type/value exports between `generated/api.ts` and `generated/types/` using `export type` re-exports
-- Codegen command: `pnpm --filter @workspace/api-spec run codegen`
-
-### Signal Engine — Phase 2 Logic
-- Fetches real-time prices from DefiLlama Coins API
-- Computes EMA9/21/50, RSI(14), MACD, ATR from 4H historical data
-- **Hard execution rules** (any violation → WAIT):
-  - NO_REGIME: regime=UNDEFINED
-  - NO_INVALIDATION: invalidation price missing or zero
-  - RR_BELOW_THRESHOLD: reward/risk < 1.5
-- **Setup families**: TREND_CONTINUATION_LONG/SHORT (primary), RANGE_LONG/SHORT (secondary, penalized), NO_SETUP
-- **Late entry ATR filter**: price > EMA9 + 1.5×ATR for LONG → ENTRY_TOO_LATE
-- **Narrative risk assessment**: regime=RANGING + momentum codes → NARRATIVE_HEAVY
-- **Process verdict**: APPROVED / REJECTED / DEGRADED (separate from direction and DJZS verdict)
-- **Logic admissibility**: ADMISSIBLE / INADMISSIBLE / CONDITIONAL
-- **Process quality grade**: A–F (ProcessGradeBadge with Radix Tooltip explaining each grade; F shows inline "HARD RULE FAILURE" label)
-- **Pre-trade checklist**: thesis, regime, entry zone, invalidation, target, reason codes, reject conditions, R/R
-- **Outcome tracking**: scaffolded stub, all nulls until Phase 3
-
-### Rejection Codes
-`NO_REGIME` `ENTRY_TOO_LATE` `STOP_INVALID` `TARGET_UNREALISTIC` `NARRATIVE_HEAVY` `CONFLICTING_SIGNALS` `CROWDING_TOO_HIGH` `NO_INVALIDATION` `RR_BELOW_THRESHOLD` `CONFIDENCE_STRUCTURE_MISMATCH` `UNDEFINED_REGIME` `RANGE_SECONDARY`
-
-### API Routes
-- `GET /api/signals` — all asset signals (cached 5 min)
-- `GET /api/signals/:asset` — signal detail with pre-trade checklist, process verdict, outcome stub
-- `GET /api/signals/feed` — chronological feed with processVerdict, setupFamily, rrRatio
-- `GET /api/market/snapshot` / `/:asset` — market data
-- `GET /api/audit/:asset?signalId=N` — DJZS audit report (optional signalId pins to stored signal snapshot; strict: 404 if signal not found, 400 if asset mismatch)
-- `GET/POST /api/watchlist`, `DELETE /api/watchlist/:id`
-- `GET/POST /api/alerts`, `DELETE /api/alerts/:id`
-- `POST /api/agent/chat` — agent chat
-- `GET /api/integrations` — all integration scaffold statuses
-- `GET /api/integrations/:name` — individual integration status
-- `POST /api/integrations/:name/toggle` — enable/disable (in-memory)
-- `GET /api/hermes/status` — scan loop state, recent jobs, daily stats
-- `GET /api/hermes/constraints` — current system constraints
-- `PUT /api/hermes/constraints` — update constraints (persisted to disk)
-- `POST /api/hermes/scan` — manual scan trigger (runs all preferred assets)
-- `GET /api/hermes/jobs` — recent job list with phase-by-phase status
-- `GET /api/hermes/metrics?period=24H|7D|30D` — DB-backed scan metrics
-- `GET /api/hermes/evaluation` — weekly policy evaluation report
-- `POST /api/hermes/findings` — protected evidence ingress (Zod-validated, persisted to DB, returns BOUNDARY_REMINDER)
-- `GET /api/hermes/findings?limit=N` — recent findings log
-- `GET /api/hermes/findings/:target` — active findings for a specific asset
-- `GET /api/pyth/prices` — live BTC/ETH/SOL prices from Pyth Hermes REST API
-- `GET /api/pyth/prices/:asset` — single asset Pyth price + confidence
-
-### DB Schema — Phase 2
-`signals` table includes: direction, confidence, verdictDjzs, processVerdict, logicAdmissibility, setupFamily, entryQuality, narrativeRisk, rrRatio, thesis, whyTrade, rejectIf, rejectionCodes, processQualityGrade, preTradChecklist (jsonb), outcomeTracking (jsonb), marketSnapshot (jsonb), trendRegime (jsonb), openInterestContext (jsonb), auditReport (jsonb)
-
-### Integration Scaffold (Phase 2–4, all off by default)
-- **Hermes** (SCHEDULER) — 15-min recurring scan, Phase 2
-- **Pyth** (PRICE_FEED) — confidence interval overlay, requires `PYTH_ENDPOINT`, Phase 2
-- **Browserbase** (RESEARCH) — triggered web research, requires `BROWSERBASE_API_KEY`, Phase 2
-- **XMTP** (ALERTS) — wallet-to-wallet delivery, requires `XMTP_PRIVATE_KEY`, Phase 3
-- **Telegram** (ALERTS) — bot delivery, requires `TELEGRAM_BOT_TOKEN`, Phase 3
-- **Discord** (ALERTS) — webhook embeds, requires `DISCORD_WEBHOOK_URL`, Phase 3
-- **MPP** (ENRICHMENT) — institutional flow enrichment, requires `MPP_API_KEY`, Phase 4
-
-### Frontend Pages
-- `/` Dashboard (Admissibility Console) — 3-layer positioning strip (DST FINDS / DJZS GATES / HERMES RUNS), asset cards with unified VerdictBadge (replaces AuditChip), signal feed with VerdictBadge + Empty component for empty state
-- `/signal/:asset` — Canonical trade packet: header + PipelineIndicators (estimated OI/funding/volume, Pyth/browserbase/routing status chips) + decision gate (DJZS + process verdict side-by-side) + prominent rejection/WAIT panel + trade parameters + routing priority + thesis + checklist + market evidence. VIEW AUDIT link passes signalId for pinned audit.
-- `/audit/:asset?signalId=N` — DJZS audit breakdown; pinned to signal snapshot when signalId provided (shows "PINNED TO SIGNAL #N"); uses VerdictBadge for check results, DJZS VERDICT naming, Empty component for not-found
-- `/watchlist` — tracked assets
-- `/alerts` — alert configuration
-- `/agent` — chat agent
-- `/integrations` — integration scaffold + live Pyth price confidence display
-- `/hermes` — Hermes operations console (pipeline stages, system constraints editor, subagent roles, job log, findings ingress section with boundary panel + live findings log)
-- `/evaluation` — stage metrics (24H/7D/30D) + weekly policy evaluation with per-parameter recommendations
-- `/signal/:asset` (signal-detail) — includes HermesTargetFindingsPanel after DataQualityPanel: renders active findings for the asset if any exist, each with boundary panel, evidence reliability indicators, and confidence as metadata label
-- `/stack` — Product positioning: DST vs charting vs execution, "NOT BUILT FOR" section, DST advantage (pre-trade discipline, evidence integration, deterministic audit), full architecture roadmap with phased integration stack, 5-step workflow diagram, operating doctrine
-
-### Extending
-- Add new assets: update `ASSET_MAP` in `defillamaClient.ts`
-- Add new timeframes: pass `timeframe` param to `computeSignal()`
-- Activate integrations: set env vars + flip `configured: true` in registry.ts, then toggle via UI
-- Enable outcome tracking: implement the Phase 3 outcome resolution loop
+- **API Codegen**: Orval
+- **Build Tool**: esbuild
+- **Data Providers**:
+    - DefiLlama Coins API (for real-time prices and historical data)
+    - Pyth Hermes REST API (for secondary price confidence verification)
+- **Messaging/Alerting (Scaffolded Integrations - configurable via env vars and UI toggle)**:
+    - XMTP (wallet-to-wallet delivery)
+    - Telegram (bot delivery)
+    - Discord (webhook embeds)
+- **Research/Enrichment (Scaffolded Integrations - configurable via env vars and UI toggle)**:
+    - Browserbase (triggered web research)
+    - MPP (institutional flow enrichment)
