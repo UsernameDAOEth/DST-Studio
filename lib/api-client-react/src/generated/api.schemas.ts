@@ -252,6 +252,10 @@ export interface AuditReport {
   checks: AuditCheck[];
   summary: string;
   generatedAt: string;
+  /** Whether this audit report was pinned to a specific signal snapshot */
+  pinned: boolean;
+  /** The signal ID this audit is pinned to, present only when pinned is true */
+  pinnedSignalId?: number;
 }
 
 /**
