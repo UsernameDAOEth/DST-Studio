@@ -3,19 +3,29 @@ import { CheckCircle2, XCircle, AlertTriangle, ShieldOff, ShieldCheck } from "lu
 import { PreTradeChecklist } from "@workspace/api-client-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
+const VERDICT_PASS = ["PASS", "APPROVED", "ADMISSIBLE"];
+const VERDICT_FAIL = ["FAIL", "REJECTED", "INADMISSIBLE"];
+const VERDICT_WARN = ["WARN", "DEGRADED", "CONDITIONAL", "WAIT"];
+
+function verdictChipClass(value: string): string {
+  if (VERDICT_PASS.includes(value)) return "chip-pass";
+  if (VERDICT_FAIL.includes(value)) return "chip-fail";
+  if (VERDICT_WARN.includes(value)) return "chip-warn";
+  if (value === "SKIP") return "chip-skip";
+  return "chip-neutral";
+}
+
+function verdictDotClass(value: string): string | null {
+  if (VERDICT_PASS.includes(value)) return "bg-primary";
+  if (VERDICT_FAIL.includes(value)) return "bg-destructive";
+  if (VERDICT_WARN.includes(value)) return "bg-[hsl(var(--trade-wait))]";
+  return null;
+}
+
 export function VerdictBadge({ value, size = "sm" }: { value?: string; size?: "sm" | "lg" }) {
   if (!value) return null;
-  const chipClass =
-    value === "PASS" || value === "APPROVED" || value === "ADMISSIBLE" ? "chip-pass" :
-    value === "FAIL" || value === "REJECTED" || value === "INADMISSIBLE" ? "chip-fail" :
-    value === "WARN" || value === "DEGRADED" || value === "CONDITIONAL" ? "chip-warn" :
-    value === "SKIP" ? "chip-skip" :
-    "chip-neutral";
-  const dotClass =
-    value === "PASS" || value === "APPROVED" || value === "ADMISSIBLE" ? "bg-primary" :
-    value === "FAIL" || value === "REJECTED" || value === "INADMISSIBLE" ? "bg-destructive" :
-    value === "WARN" || value === "DEGRADED" || value === "CONDITIONAL" ? "bg-[hsl(var(--trade-wait))]" :
-    null;
+  const chipClass = verdictChipClass(value);
+  const dotClass = verdictDotClass(value);
   if (size === "lg") {
     return (
       <span className={cn(chipClass, "text-xs px-3 py-1")}>
@@ -38,11 +48,7 @@ export function ProcessVerdictBadge({ verdict }: { verdict?: string }) {
 }
 
 export function LogicAdmissibilityBadge({ admissibility }: { admissibility?: string }) {
-  if (!admissibility) return null;
-  if (admissibility === "ADMISSIBLE") return <span className="chip-pass">ADMISSIBLE</span>;
-  if (admissibility === "INADMISSIBLE") return <span className="chip-fail">INADMISSIBLE</span>;
-  if (admissibility === "CONDITIONAL") return <span className="chip-warn">CONDITIONAL</span>;
-  return <span className="chip-neutral">{admissibility}</span>;
+  return <VerdictBadge value={admissibility} />;
 }
 
 export function SetupFamilyLabel({ family }: { family?: string }) {
@@ -290,8 +296,9 @@ export function WaitDecisionPanel({
 }
 
 export function DjzsGateBadge({ verdict, admissibility }: { verdict?: string; admissibility?: string }) {
-  const isPass = verdict === "PASS";
-  const isFail = verdict === "FAIL";
+  const v = verdict || "";
+  const isPass = VERDICT_PASS.includes(v);
+  const isFail = VERDICT_FAIL.includes(v);
 
   return (
     <div className={cn(
@@ -305,19 +312,16 @@ export function DjzsGateBadge({ verdict, admissibility }: { verdict?: string; ad
       ) : isFail ? (
         <ShieldOff className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
       ) : (
-        <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+        <AlertTriangle className="w-4 h-4 text-[hsl(var(--trade-wait))] shrink-0 mt-0.5" />
       )}
       <div className="flex-1">
         <div className="micro-label mb-1.5">DJZS AUDIT VERDICT</div>
-        <div className={cn(
-          "font-mono text-sm font-bold uppercase tracking-wider",
-          isPass ? "text-primary" : isFail ? "text-destructive" : "text-muted-foreground"
-        )}>
-          {verdict || "—"}
+        <div className="mt-1">
+          <VerdictBadge value={verdict} size="lg" />
         </div>
         {admissibility && (
           <div className="mt-2">
-            <LogicAdmissibilityBadge admissibility={admissibility} />
+            <VerdictBadge value={admissibility} />
           </div>
         )}
         <div className="micro-label text-muted-foreground/50 mt-2.5 leading-relaxed normal-case text-[9px] uppercase tracking-wider">
