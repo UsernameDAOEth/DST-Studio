@@ -152,7 +152,7 @@ router.get("/:asset", async (req, res) => {
     marketSnapshot: row.marketSnapshot,
     trendRegime: row.trendRegime,
     openInterestContext: row.openInterestContext,
-    auditReport: row.auditReport,
+    auditReport: row.auditReport ? { ...(row.auditReport as Record<string, unknown>), pinned: false } : row.auditReport,
     preTradChecklist: row.preTradChecklist,
     outcomeTracking: row.outcomeTracking,
     dataQuality: row.dataQuality,
