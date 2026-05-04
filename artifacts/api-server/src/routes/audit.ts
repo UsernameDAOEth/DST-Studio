@@ -54,6 +54,8 @@ router.get("/:asset", async (req, res) => {
     return;
   }
 
+  // Intentional 404: audit must never recompute independently (snapshot integrity).
+  // A signal must be computed via /api/signals first before its audit is available.
   res.status(404).json({ error: `No stored signal for ${asset}. Trigger a scan first.` });
 });
 

@@ -23,19 +23,16 @@ function DataGradeChip({ grade }: { grade?: string }) {
 function PipelineChips({ dataQuality }: { dataQuality?: { grade?: string; flags?: string[] } }) {
   if (!dataQuality) return null;
   const flags = dataQuality.flags ?? [];
-  const chips: string[] = [];
-  if (flags.includes("SYNTHETIC_OI")) chips.push("OI: EST");
-  if (flags.includes("SYNTHETIC_FUNDING")) chips.push("FUND: EST");
-  if (dataQuality.grade && dataQuality.grade !== "FULL") return (
-    <div className="flex flex-wrap gap-1 mt-1">
-      <DataGradeChip grade={dataQuality.grade} />
-      {chips.map(c => <span key={c} className="chip-warn text-[7px]">{c}</span>)}
-    </div>
-  );
-  if (chips.length === 0) return null;
+  const chips: { label: string; variant: "warn" | "fail" }[] = [];
+  if (flags.includes("SYNTHETIC_OI")) chips.push({ label: "OI: EST", variant: "warn" });
+  if (flags.includes("SYNTHETIC_FUNDING")) chips.push({ label: "FUND: EST", variant: "warn" });
+  if (flags.includes("VOLUME_MISSING")) chips.push({ label: "VOL: N/A", variant: "fail" });
+  const hasGradeChip = dataQuality.grade && dataQuality.grade !== "FULL";
+  if (!hasGradeChip && chips.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1 mt-1">
-      {chips.map(c => <span key={c} className="chip-warn text-[7px]">{c}</span>)}
+      {hasGradeChip && <DataGradeChip grade={dataQuality.grade} />}
+      {chips.map(c => <span key={c.label} className={cn(c.variant === "fail" ? "chip-fail" : "chip-warn", "text-[7px]")}>{c.label}</span>)}
     </div>
   );
 }
