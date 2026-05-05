@@ -54,7 +54,8 @@ export type RejectionCode =
   | "DATA_UNAVAILABLE"
   | "STALE_PRICE"
   | "INSUFFICIENT_HISTORY"
-  | "FALLBACK_PRICE_USED";
+  | "FALLBACK_PRICE_USED"
+  | "PART_WHOLE_ERROR";
 
 export interface PreTradeChecklist {
   thesis: string;
