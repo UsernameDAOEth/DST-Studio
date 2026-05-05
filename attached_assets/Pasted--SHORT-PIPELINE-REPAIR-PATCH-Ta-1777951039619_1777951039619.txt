@@ -1,0 +1,336 @@
+// ============================================================
+// SHORT PIPELINE REPAIR PATCH
+// Target: artifacts/api-server/src/lib/dst/signalEngine.ts
+// Purpose:
+// 1) stop over-blocking SHORTs at the trigger layer
+// 2) prevent invalid SHORTs with atr=0 / ema=0 from emitting
+// 3) improve observability with correct rejection codes
+// 4) keep audit discipline intact
+// ============================================================
+
+// ------------------------------------------------------------
+// 1) Extend rejection codes
+// ------------------------------------------------------------
+
+export type RejectionCode =
+  | "NO_REGIME"
+  | "NO_INVALIDATION"
+  | "RR_BELOW_THRESHOLD"
+  | "ENTRY_TOO_LATE"
+  | "NARRATIVE_HEAVY"
+  | "CONFLICTING_SIGNALS"
+  | "CROWDING_TOO_HIGH"
+  | "STALE_DATA"
+  | "INCOMPLETE_DATA"
+  | "NO_DIRECTIONAL_TRIGGER"
+  | "INDICATOR_DEGENERATE";
+
+// ------------------------------------------------------------
+// 2) Add helpers
+// ------------------------------------------------------------
+
+function isDegenerateIndicator(value: number | null | undefined): boolean {
+  return (
+    value == null ||
+    !Number.isFinite(value) ||
+    value === 0
+  );
+}
+
+function normalizeNumber(value: number | null | undefined, fallback = 0): number {
+  return value != null && Number.isFinite(value) ? value : fallback;
+}
+
+// ------------------------------------------------------------
+// 3) Soften trigger logic for SHORT and LONG
+//    Diagnosis says strict MACD<0 is blocking most BEAR shorts.
+//    Replace with ATR-relative threshold.
+// ------------------------------------------------------------
+
+type DirectionalTriggerResult = {
+  direction: "LONG" | "SHORT" | "WAIT";
+  rejectionCode?: RejectionCode;
+};
+
+function getDirectionalTrigger(params: {
+  regime: "BULL" | "BEAR" | "RANGING" | "UNKNOWN";
+  macdHistogram: number;
+  rsi: number;
+  atr: number;
+}): DirectionalTriggerResult {
+  const { regime, macdHistogram, rsi, atr } = params;
+  const atrSafe = normalizeNumber(atr, 0);
+
+  // Guard before trigger logic
+  if (isDegenerateIndicator(atrSafe)) {
+    return { direction: "WAIT", rejectionCode: "INDICATOR_DEGENERATE" };
+  }
+
+  // Softer MACD threshold relative to ATR
+  const longMacdOk = macdHistogram > -0.25 * atrSafe;
+  const shortMacdOk = macdHistogram < 0.25 * atrSafe;
+
+  if (regime === "BULL") {
+    if (longMacdOk && rsi >= 40 && rsi < 75) {
+      return { direction: "LONG" };
+    }
+    return { direction: "WAIT", rejectionCode: "NO_DIRECTIONAL_TRIGGER" };
+  }
+
+  if (regime === "BEAR") {
+    // Raise floor from >25 to >=30 to avoid oversold contradiction
+    if (shortMacdOk && rsi >= 30 && rsi < 50) {
+      return { direction: "SHORT" };
+    }
+    return { direction: "WAIT", rejectionCode: "NO_DIRECTIONAL_TRIGGER" };
+  }
+
+  return { direction: "WAIT", rejectionCode: "NO_REGIME" };
+}
+
+// ------------------------------------------------------------
+// 4) Guard signal construction so degenerate indicators
+//    never emit SHORT/LONG packets that later get auto-rejected
+// ------------------------------------------------------------
+
+function buildTradeLevels(params: {
+  direction: "LONG" | "SHORT";
+  currentPrice: number;
+  atr: number;
+}) {
+  const { direction, currentPrice, atr } = params;
+
+  if (isDegenerateIndicator(currentPrice) || isDegenerateIndicator(atr)) {
+    return null;
+  }
+
+  if (direction === "LONG") {
+    return {
+      entryZoneLow: currentPrice - 0.3 * atr,
+      entryZoneHigh: currentPrice,
+      targetPrice: currentPrice + 2.25 * atr,
+      invalidationPrice: currentPrice - 1.5 * atr,
+    };
+  }
+
+  return {
+    entryZoneLow: currentPrice,
+    entryZoneHigh: currentPrice + 0.3 * atr,
+    targetPrice: currentPrice - 2.5 * atr,
+    invalidationPrice: currentPrice + 1.5 * atr,
+  };
+}
+
+// ------------------------------------------------------------
+// 5) Fix RR computation
+//    WAIT or degenerate levels should not produce 0.0x
+// ------------------------------------------------------------
+
+function computeRR(params: {
+  direction: "LONG" | "SHORT" | "WAIT";
+  currentPrice: number;
+  targetPrice?: number | null;
+  invalidationPrice?: number | null;
+}): number | null {
+  const { direction, currentPrice, targetPrice, invalidationPrice } = params;
+
+  if (
+    direction === "WAIT" ||
+    targetPrice == null ||
+    invalidationPrice == null ||
+    !Number.isFinite(targetPrice) ||
+    !Number.isFinite(invalidationPrice) ||
+    !Number.isFinite(currentPrice)
+  ) {
+    return null;
+  }
+
+  const reward =
+    direction === "LONG"
+      ? targetPrice - currentPrice
+      : currentPrice - targetPrice;
+
+  const risk =
+    direction === "LONG"
+      ? currentPrice - invalidationPrice
+      : invalidationPrice - currentPrice;
+
+  if (risk <= 0 || reward <= 0) return null;
+
+  return reward / risk;
+}
+
+// ------------------------------------------------------------
+// 6) Fix entry quality
+//    SHORTs were getting INVALID because atr/ema zero leaked through
+// ------------------------------------------------------------
+
+function assessEntryQuality(params: {
+  direction: "LONG" | "SHORT" | "WAIT";
+  currentPrice: number;
+  ema9: number;
+  atr: number;
+}): "GOOD" | "ACCEPTABLE" | "LATE" | "INVALID" | null {
+  const { direction, currentPrice, ema9, atr } = params;
+
+  if (direction === "WAIT") return null;
+  if (isDegenerateIndicator(currentPrice) || isDegenerateIndicator(ema9) || isDegenerateIndicator(atr)) {
+    return "INVALID";
+  }
+
+  const distance = Math.abs(currentPrice - ema9);
+
+  if (distance <= 0.25 * atr) return "GOOD";
+  if (distance <= 0.75 * atr) return "ACCEPTABLE";
+  return "LATE";
+}
+
+// ------------------------------------------------------------
+// 7) Fix narrative risk asymmetry
+//    Diagnosis says SHORTs were showing HIGH in BEAR regime.
+// ------------------------------------------------------------
+
+function assessNarrativeRisk(params: {
+  regime: "BULL" | "BEAR" | "RANGING" | "UNKNOWN";
+  direction: "LONG" | "SHORT" | "WAIT";
+}): "LOW" | "MEDIUM" | "HIGH" {
+  const { regime, direction } = params;
+
+  if (
+    (regime === "BULL" && direction === "LONG") ||
+    (regime === "BEAR" && direction === "SHORT")
+  ) {
+    return "LOW";
+  }
+
+  if (direction === "WAIT" || regime === "RANGING") {
+    return "HIGH";
+  }
+
+  return "MEDIUM";
+}
+
+// ------------------------------------------------------------
+// 8) Use new trigger in main signal computation
+//    Replace the existing direct LONG/SHORT conjunctions
+// ------------------------------------------------------------
+
+export function computeSignal(input: {
+  asset: string;
+  currentPrice: number;
+  regime: "BULL" | "BEAR" | "RANGING" | "UNKNOWN";
+  ema9: number;
+  ema21: number;
+  ema50: number;
+  macdHistogram: number;
+  rsi: number;
+  atr: number;
+  computedAt: string;
+}) {
+  const {
+    asset,
+    currentPrice,
+    regime,
+    ema9,
+    macdHistogram,
+    rsi,
+    atr,
+    computedAt,
+  } = input;
+
+  const rejectionCodes: RejectionCode[] = [];
+
+  const trigger = getDirectionalTrigger({
+    regime,
+    macdHistogram,
+    rsi,
+    atr,
+  });
+
+  let direction = trigger.direction;
+
+  if (trigger.rejectionCode) {
+    rejectionCodes.push(trigger.rejectionCode);
+  }
+
+  const levels =
+    direction === "WAIT"
+      ? null
+      : buildTradeLevels({
+          direction,
+          currentPrice,
+          atr,
+        });
+
+  if (direction !== "WAIT" && !levels) {
+    direction = "WAIT";
+    if (!rejectionCodes.includes("INDICATOR_DEGENERATE")) {
+      rejectionCodes.push("INDICATOR_DEGENERATE");
+    }
+  }
+
+  const rrRatio = computeRR({
+    direction,
+    currentPrice,
+    targetPrice: levels?.targetPrice ?? null,
+    invalidationPrice: levels?.invalidationPrice ?? null,
+  });
+
+  const entryQuality = assessEntryQuality({
+    direction,
+    currentPrice,
+    ema9,
+    atr,
+  });
+
+  const narrativeRisk = assessNarrativeRisk({
+    regime,
+    direction,
+  });
+
+  // Prevent WAIT packets from leaking fake R/R or INVALID setup semantics
+  const displayRrRatio = direction === "WAIT" ? null : rrRatio;
+  const displayEntryQuality = direction === "WAIT" ? null : entryQuality;
+
+  return {
+    asset,
+    computedAt,
+    direction,
+    regime,
+    currentPrice,
+    entryZoneLow: levels?.entryZoneLow ?? null,
+    entryZoneHigh: levels?.entryZoneHigh ?? null,
+    targetPrice: levels?.targetPrice ?? null,
+    invalidationPrice: levels?.invalidationPrice ?? null,
+    rrRatio: displayRrRatio,
+    entryQuality: displayEntryQuality,
+    narrativeRisk,
+    rejectionCodes,
+  };
+}
+
+// ------------------------------------------------------------
+// 9) Fix process verdict so empty rejection codes do not silently
+//    fall into REJECTED without explanation
+// ------------------------------------------------------------
+
+function computeProcessVerdict(params: {
+  direction: "LONG" | "SHORT" | "WAIT";
+  entryQuality: "GOOD" | "ACCEPTABLE" | "LATE" | "INVALID" | null;
+  rrRatio: number | null;
+  rejectionCodes: RejectionCode[];
+}): "APPROVED" | "DEGRADED" | "REJECTED" {
+  const { direction, entryQuality, rrRatio, rejectionCodes } = params;
+
+  if (direction === "WAIT") return "REJECTED";
+
+  if (entryQuality === "INVALID") return "REJECTED";
+
+  if (rejectionCodes.length > 0) return "REJECTED";
+
+  if (rrRatio != null && rrRatio >= 1.5 && (entryQuality === "GOOD" || entryQuality === "ACCEPTABLE")) {
+    return "APPROVED";
+  }
+
+  return "DEGRADED";
+}
