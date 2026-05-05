@@ -55,7 +55,9 @@ export type RejectionCode =
   | "STALE_PRICE"
   | "INSUFFICIENT_HISTORY"
   | "FALLBACK_PRICE_USED"
-  | "PART_WHOLE_ERROR";
+  | "PART_WHOLE_ERROR"
+  | "NO_DIRECTIONAL_TRIGGER"
+  | "INDICATOR_DEGENERATE";
 
 export interface PreTradeChecklist {
   thesis: string;
@@ -365,6 +367,9 @@ function assessNarrativeRisk(regime: Regime, reasonCodes: string[], oi: OIContex
   if (regime === "RANGING" && momentumCount >= 3) return "HIGH";
   if (oi.dominantSide !== "NEUTRAL" && oi.dominantSide !== direction && Math.abs(oi.fundingRate) > 0.001) return "HIGH";
   if (regime === "RANGING" && momentumCount >= 1) return "MEDIUM";
+  // Symmetric resolution: BULL+LONG and BEAR+SHORT both reduce to LOW. Old DB
+  // rows showing HIGH for BEAR+SHORT pre-date this branch and will not be
+  // backfilled — fresh signals resolve correctly.
   if (regime === "BULL" || regime === "BEAR") return "LOW";
   return "HIGH";
 }
@@ -414,10 +419,10 @@ function generateWhyTrade(direction: Direction, processVerdict: ProcessVerdict, 
 }
 
 function computeProcessVerdict(rejectionCodes: RejectionCode[], entryQuality: EntryQuality, logicAdmissibility: LogicAdmissibility, narrativeRisk: NarrativeRisk, rrRatio: number): ProcessVerdict {
-  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD", "DATA_UNAVAILABLE"];
+  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD", "DATA_UNAVAILABLE", "INDICATOR_DEGENERATE"];
   if (rejectionCodes.some(c => hardRejections.includes(c))) return "REJECTED";
 
-  const degradedCodes: RejectionCode[] = ["ENTRY_TOO_LATE", "NARRATIVE_HEAVY", "CROWDING_TOO_HIGH", "RANGE_SECONDARY", "CONFIDENCE_STRUCTURE_MISMATCH", "STALE_PRICE", "INSUFFICIENT_HISTORY", "FALLBACK_PRICE_USED"];
+  const degradedCodes: RejectionCode[] = ["ENTRY_TOO_LATE", "NARRATIVE_HEAVY", "CROWDING_TOO_HIGH", "RANGE_SECONDARY", "CONFIDENCE_STRUCTURE_MISMATCH", "STALE_PRICE", "INSUFFICIENT_HISTORY", "FALLBACK_PRICE_USED", "NO_DIRECTIONAL_TRIGGER"];
   if (rejectionCodes.some(c => degradedCodes.includes(c))) return "DEGRADED";
 
   if (rejectionCodes.length === 0 && (entryQuality === "OPTIMAL" || entryQuality === "ACCEPTABLE") && rrRatio >= 1.5) return "APPROVED";
@@ -426,7 +431,7 @@ function computeProcessVerdict(rejectionCodes: RejectionCode[], entryQuality: En
 }
 
 function computeLogicAdmissibility(processVerdict: ProcessVerdict, auditVerdict: Verdict, rejectionCodes: RejectionCode[]): LogicAdmissibility {
-  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD", "DATA_UNAVAILABLE"];
+  const hardRejections: RejectionCode[] = ["NO_REGIME", "NO_INVALIDATION", "STOP_INVALID", "UNDEFINED_REGIME", "RR_BELOW_THRESHOLD", "DATA_UNAVAILABLE", "INDICATOR_DEGENERATE"];
   if (processVerdict === "REJECTED" || rejectionCodes.some(c => hardRejections.includes(c))) return "INADMISSIBLE";
   if (processVerdict === "DEGRADED" || auditVerdict === "WAIT") return "CONDITIONAL";
   if (processVerdict === "APPROVED" && auditVerdict === "PASS") return "ADMISSIBLE";
@@ -597,15 +602,33 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   const reasonCodes: string[] = [];
   const rejectionCodes: RejectionCode[] = [];
 
-  if (regime === "BULL" && macdResult.histogram > 0 && rsiVal > 50 && rsiVal < 75) {
+  // ── Directional trigger ────────────────────────────────────────────────────
+  // MACD threshold is ATR-relative (±0.25·ATR) rather than strict zero crossing.
+  // MACD lags the EMA stack; in a confirmed BEAR (or BULL) 3-EMA stack a mildly
+  // positive (or negative) histogram is normal pullback noise, not invalidation.
+  // The strict-MACD audit check (MACD_CONFIRM) stays at 0 — softly-admitted
+  // signals fail that audit and land as DEGRADED, not APPROVED. Trigger admits
+  // candidates; audit grades them.
+  const macdLongOk = macdResult.histogram > -0.25 * atrVal;
+  const macdShortOk = macdResult.histogram < 0.25 * atrVal;
+
+  if (regime === "BULL" && macdLongOk && rsiVal > 50 && rsiVal < 75) {
     direction = "LONG";
     reasonCodes.push("BULL_REGIME", "MACD_POSITIVE", "RSI_MIDZONE");
-  } else if (regime === "BEAR" && macdResult.histogram < 0 && rsiVal < 50 && rsiVal > 25) {
+  } else if (regime === "BEAR" && macdShortOk && rsiVal >= 30 && rsiVal < 50) {
     direction = "SHORT";
     reasonCodes.push("BEAR_REGIME", "MACD_NEGATIVE", "RSI_MIDZONE");
   } else {
     direction = "WAIT";
     reasonCodes.push("REGIME_UNCLEAR");
+    // Distinguish "trigger failed inside a directional regime" from "no
+    // directional regime at all". RANGING gets the existing WAIT path with no
+    // extra code; BULL/BEAR with a failed conjunction is observability-tagged
+    // so the analytics breakdown shows the real cause instead of mis-attributing
+    // it to NO_INVALIDATION downstream.
+    if (regime === "BULL" || regime === "BEAR") {
+      rejectionCodes.push("NO_DIRECTIONAL_TRIGGER");
+    }
   }
 
   if (dominantSide === direction) reasonCodes.push("OI_CONFIRMS");
@@ -628,6 +651,23 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   }
   if (qualityFlags.includes("INSUFFICIENT_HISTORY")) {
     if (!rejectionCodes.includes("INSUFFICIENT_HISTORY")) rejectionCodes.push("INSUFFICIENT_HISTORY");
+  }
+
+  // ── Indicator-degenerate guard ──────────────────────────────────────────────
+  // Prevents SHORT/LONG packets from emitting when ATR, EMA9, or currentPrice
+  // are zero / NaN / non-finite. Without this guard, assessEntryQuality returns
+  // INVALID and computeRR returns 0, which then trips the silent fallthrough at
+  // computeProcessVerdict's terminal `return "REJECTED"` with empty rejection
+  // codes — the exact failure mode that produced 12/12 REJECTED SHORTs. Forcing
+  // WAIT here surfaces an explicit code (INDICATOR_DEGENERATE) instead.
+  if (
+    direction !== "WAIT" &&
+    (!Number.isFinite(atrVal) || atrVal === 0 ||
+     !Number.isFinite(ema9Val) || ema9Val === 0 ||
+     !Number.isFinite(currentPrice) || currentPrice === 0)
+  ) {
+    direction = "WAIT";
+    if (!rejectionCodes.includes("INDICATOR_DEGENERATE")) rejectionCodes.push("INDICATOR_DEGENERATE");
   }
 
   // ── Price levels ────────────────────────────────────────────────────────────
@@ -691,9 +731,19 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     direction = "WAIT";
     rejectionCodes.push("UNDEFINED_REGIME");
   }
-  if (invalidationPrice <= 0 || invalidationPrice === currentPrice) {
+  // NO_INVALIDATION applies to genuinely emitted directional setups that lack
+  // a valid stop. For WAIT packets the entry/invalidation zones collapse onto
+  // currentPrice by construction, which would mis-tag every WAIT as
+  // NO_INVALIDATION and overshadow the real diagnostic (e.g.
+  // NO_DIRECTIONAL_TRIGGER, INDICATOR_DEGENERATE, REGIME_UNCLEAR). Gate the
+  // equality branch on a directional signal; the <= 0 branch is still a hard
+  // data error and fires unconditionally.
+  if (invalidationPrice <= 0) {
     direction = "WAIT";
-    rejectionCodes.push("NO_INVALIDATION");
+    if (!rejectionCodes.includes("NO_INVALIDATION")) rejectionCodes.push("NO_INVALIDATION");
+  } else if (invalidationPrice === currentPrice && direction !== "WAIT") {
+    direction = "WAIT";
+    if (!rejectionCodes.includes("NO_INVALIDATION")) rejectionCodes.push("NO_INVALIDATION");
   }
   if (rrRatio < constraints.minRRThreshold && direction !== "WAIT") {
     direction = "WAIT";
@@ -809,6 +859,20 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   // ── DJZS audit ──────────────────────────────────────────────────────────────
   const checks = buildAuditChecks(trendRegime, oiContext, direction, priceSeries, pythSnapshotData, currentPrice);
   const { verdict: auditVerdict, summary: auditSummary } = computeVerdict(checks);
+
+  // Soft-admit grading enforcement: the directional trigger (lines ~615-620)
+  // admits BULL/BEAR signals on ATR-relative MACD; the audit layer
+  // (MACD_CONFIRM and friends) keeps the strict zero-cross gate. If a
+  // directional signal was admitted but the audit did not PASS, downgrade an
+  // APPROVED process verdict to DEGRADED so soft admits never reach APPROVED.
+  if (
+    finalProcessVerdict === "APPROVED" &&
+    direction !== "WAIT" &&
+    auditVerdict !== "PASS"
+  ) {
+    finalProcessVerdict = "DEGRADED";
+  }
+
   const logicAdmissibility = computeLogicAdmissibility(finalProcessVerdict, auditVerdict, rejectionCodes);
   const processQualityGrade = computeProcessGrade(finalProcessVerdict, logicAdmissibility, entryQuality, narrativeRisk, rrRatio, rejectionCodes);
 

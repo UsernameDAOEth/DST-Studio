@@ -93,7 +93,7 @@ export const GetSignalsResponseItem = zod
     rejectionCodes: zod
       .array(zod.string())
       .describe(
-        "Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY. Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT).\n",
+        "Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY, NO_DIRECTIONAL_TRIGGER (regime is BULL\/BEAR but the MACD\/RSI trigger conjunction did not match — degrades signal, replaces mis-tagged NO_INVALIDATION on directional-regime WAITs). Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT), INDICATOR_DEGENERATE (ATR\/EMA9\/price zero or non-finite — forces WAIT to prevent zero-RR SHORT\/LONG packets from emitting).\n",
       ),
     processQualityGrade: zod
       .enum(["A", "B", "C", "D", "F"])
@@ -188,7 +188,7 @@ export const GetSignalByAssetResponse = zod
     rejectionCodes: zod
       .array(zod.string())
       .describe(
-        "Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY. Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT).\n",
+        "Machine-readable codes for why the setup was rejected or degraded. Signal logic codes: NO_REGIME, ENTRY_TOO_LATE, STOP_INVALID, TARGET_UNREALISTIC, NARRATIVE_HEAVY, CONFLICTING_SIGNALS, CROWDING_TOO_HIGH, NO_INVALIDATION, RR_BELOW_THRESHOLD, CONFIDENCE_STRUCTURE_MISMATCH, UNDEFINED_REGIME, RANGE_SECONDARY, NO_DIRECTIONAL_TRIGGER (regime is BULL\/BEAR but the MACD\/RSI trigger conjunction did not match — degrades signal, replaces mis-tagged NO_INVALIDATION on directional-regime WAITs). Data-quality codes: DATA_UNAVAILABLE (price missing or zero — hard WAIT), STALE_PRICE (DefiLlama timestamp older than 5 minutes — degrades signal), INSUFFICIENT_HISTORY (fewer than 50 4H bars — indicators unreliable), FALLBACK_PRICE_USED (fetch failed, zero used as fallback — hard WAIT), INDICATOR_DEGENERATE (ATR\/EMA9\/price zero or non-finite — forces WAIT to prevent zero-RR SHORT\/LONG packets from emitting).\n",
       ),
     processQualityGrade: zod
       .enum(["A", "B", "C", "D", "F"])

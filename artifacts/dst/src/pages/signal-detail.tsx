@@ -21,6 +21,13 @@ import { DataQualityPanel } from "@/components/data-quality";
 import { VerificationPanel } from "@/components/verification-panel";
 import { HermesTargetFindingsPanel } from "@/components/hermes-findings";
 
+function formatRR(rrRatio: number | null | undefined, direction: string): string {
+  if (direction === "WAIT" || rrRatio == null || !Number.isFinite(rrRatio) || rrRatio <= 0) {
+    return "—";
+  }
+  return `${rrRatio.toFixed(1)}x`;
+}
+
 function DirectionChip({ direction }: { direction: string }) {
   if (direction === "LONG") return <span className="chip-long">{direction}</span>;
   if (direction === "SHORT") return <span className="chip-short">{direction}</span>;
@@ -316,7 +323,7 @@ export default function SignalDetail() {
           <div className="p-4">
             <div className="flex items-center gap-3 mb-3">
               <ProcessVerdictBadge verdict={signal.processVerdict} />
-              {!isWait && <RRRatioBadge ratio={signal.rrRatio} />}
+              {!isWait && signal.rrRatio > 0 && Number.isFinite(signal.rrRatio) && <RRRatioBadge ratio={signal.rrRatio} />}
             </div>
             <div className="flex flex-wrap gap-2 mb-3">
               <EntryQualityBadge quality={signal.entryQuality} overridden={signal.processVerdict === "REJECTED"} />
@@ -370,9 +377,9 @@ export default function SignalDetail() {
             />
             <PacketField
               label="R/R RATIO"
-              value={!isWait && signal.rrRatio > 0 ? `${signal.rrRatio.toFixed(1)}x` : "—"}
+              value={formatRR(signal.rrRatio, signal.direction)}
               accent={
-                isWait ? "muted" :
+                isWait || !Number.isFinite(signal.rrRatio) || signal.rrRatio <= 0 ? "muted" :
                 signal.rrRatio >= 2 ? "long" :
                 signal.rrRatio >= 1.5 ? "wait" : "short"
               }
