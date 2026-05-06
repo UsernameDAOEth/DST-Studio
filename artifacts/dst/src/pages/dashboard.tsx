@@ -7,6 +7,7 @@ import { ArrowRight, ShieldOff, Radio, AlertTriangle, Scan } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { ProcessVerdictBadge, SetupFamilyLabel, VerdictBadge, gateDisplayVerdict } from "@/components/signal-process";
 import { LazerStreamPanel } from "@/components/lazer-stream-panel";
+import { PipelineHealthChip } from "@/components/pipeline-health-chip";
 
 function DirectionChip({ direction }: { direction: string }) {
   if (direction === "LONG") return <span className="chip-long">{direction}</span>;
@@ -201,6 +202,10 @@ export default function Dashboard() {
             SIGNAL FEED: {waitPct}% WAIT — WAIT IS THE CORRECT OUTCOME WHEN NO SETUP PASSES AUDIT
           </div>
         )}
+
+        <div className="mt-3">
+          <PipelineHealthChip />
+        </div>
       </div>
 
       <LazerStreamPanel />

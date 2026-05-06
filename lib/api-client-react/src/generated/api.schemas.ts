@@ -5,6 +5,24 @@
  * DST Signal Engine — DJZS Audit Protocol
  * OpenAPI spec version: 0.2.0
  */
+export interface DstPipelineHealth {
+  /** Rolling window in days used for the aggregation (currently 7). */
+  windowDays: number;
+  longCount: number;
+  shortCount: number;
+  waitCount: number;
+  /** shortCount / max(1, shortCount + longCount). 0..1. */
+  shortShareOfDirectional: number;
+  /** APPROVED LONGs / total LONGs. 0..1. Zero when no LONGs exist. */
+  longApprovalRate: number;
+  /** APPROVED SHORTs / total SHORTs. 0..1. Zero when no SHORTs exist. */
+  shortApprovalRate: number;
+  /** True when shortCount > 0 and no SHORT reached APPROVED in the window. Surfaces the asymmetric-audit failure mode directly on the dashboard.
+   */
+  shortPipelineBroken: boolean;
+  generatedAt: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -60,7 +78,8 @@ export const SignalLogicAdmissibility = {
 } as const;
 
 /**
- * Classified setup type. Trend continuation is the primary family.
+ * Classified setup type. Trend continuation is the primary family. COUNTER_TREND_SHORT_EXHAUSTION admits SHORT signals against a BULL regime when overextension + RSI exhaustion + cooling MACD coincide; graded with stricter R/R floor to keep audit discipline.
+
  */
 export type SignalSetupFamily =
   (typeof SignalSetupFamily)[keyof typeof SignalSetupFamily];
@@ -70,6 +89,7 @@ export const SignalSetupFamily = {
   TREND_CONTINUATION_SHORT: "TREND_CONTINUATION_SHORT",
   RANGE_LONG: "RANGE_LONG",
   RANGE_SHORT: "RANGE_SHORT",
+  COUNTER_TREND_SHORT_EXHAUSTION: "COUNTER_TREND_SHORT_EXHAUSTION",
   NO_SETUP: "NO_SETUP",
 } as const;
 
@@ -134,7 +154,8 @@ export interface Signal {
   /** Whether the signal passes structural logic rules. Separate from market direction and from the DJZS audit verdict.
    */
   logicAdmissibility: SignalLogicAdmissibility;
-  /** Classified setup type. Trend continuation is the primary family. */
+  /** Classified setup type. Trend continuation is the primary family. COUNTER_TREND_SHORT_EXHAUSTION admits SHORT signals against a BULL regime when overextension + RSI exhaustion + cooling MACD coincide; graded with stricter R/R floor to keep audit discipline.
+   */
   setupFamily: SignalSetupFamily;
   /** Quality grade for the entry timing based on ATR extension and structure. */
   entryQuality: SignalEntryQuality;
@@ -885,6 +906,7 @@ export const SignalFeedEntrySetupFamily = {
   TREND_CONTINUATION_SHORT: "TREND_CONTINUATION_SHORT",
   RANGE_LONG: "RANGE_LONG",
   RANGE_SHORT: "RANGE_SHORT",
+  COUNTER_TREND_SHORT_EXHAUSTION: "COUNTER_TREND_SHORT_EXHAUSTION",
   NO_SETUP: "NO_SETUP",
 } as const;
 

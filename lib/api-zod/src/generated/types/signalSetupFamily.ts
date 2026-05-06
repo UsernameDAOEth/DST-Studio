@@ -7,7 +7,8 @@
  */
 
 /**
- * Classified setup type. Trend continuation is the primary family.
+ * Classified setup type. Trend continuation is the primary family. COUNTER_TREND_SHORT_EXHAUSTION admits SHORT signals against a BULL regime when overextension + RSI exhaustion + cooling MACD coincide; graded with stricter R/R floor to keep audit discipline.
+
  */
 export type SignalSetupFamily =
   (typeof SignalSetupFamily)[keyof typeof SignalSetupFamily];
@@ -17,5 +18,6 @@ export const SignalSetupFamily = {
   TREND_CONTINUATION_SHORT: "TREND_CONTINUATION_SHORT",
   RANGE_LONG: "RANGE_LONG",
   RANGE_SHORT: "RANGE_SHORT",
+  COUNTER_TREND_SHORT_EXHAUSTION: "COUNTER_TREND_SHORT_EXHAUSTION",
   NO_SETUP: "NO_SETUP",
 } as const;

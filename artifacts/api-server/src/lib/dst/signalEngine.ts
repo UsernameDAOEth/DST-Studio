@@ -33,7 +33,7 @@ export type CheckResult = "PASS" | "FAIL" | "WARN" | "SKIP";
 
 export type ProcessVerdict = "APPROVED" | "REJECTED" | "DEGRADED";
 export type LogicAdmissibility = "ADMISSIBLE" | "INADMISSIBLE" | "CONDITIONAL";
-export type SetupFamily = "TREND_CONTINUATION_LONG" | "TREND_CONTINUATION_SHORT" | "RANGE_LONG" | "RANGE_SHORT" | "NO_SETUP";
+export type SetupFamily = "TREND_CONTINUATION_LONG" | "TREND_CONTINUATION_SHORT" | "RANGE_LONG" | "RANGE_SHORT" | "COUNTER_TREND_SHORT_EXHAUSTION" | "NO_SETUP";
 export type EntryQuality = "OPTIMAL" | "ACCEPTABLE" | "LATE" | "INVALID";
 export type NarrativeRisk = "LOW" | "MEDIUM" | "HIGH";
 export type ProcessQualityGrade = "A" | "B" | "C" | "D" | "F";
@@ -113,6 +113,13 @@ export interface OIContext {
   fundingRate: number;
   longShortRatio: number;
   dominantSide: DominantSide;
+  // Confidence label for the perp microstructure block. "ESTIMATED" means
+  // every field above was synthesized from regime + price (not real exchange
+  // data); audit checks that depend on these values must SKIP / abstain when
+  // the confidence is ESTIMATED, otherwise synthetic correlated noise gets
+  // treated as evidence and biases verdicts toward whatever the regime
+  // already implied.
+  dataConfidence: "REAL" | "ESTIMATED";
 }
 
 export interface AuditCheck {
@@ -203,6 +210,11 @@ function buildAuditChecks(
     weight: 0.25,
   });
 
+  // Symmetric RSI acceptance windows (35-point bands mirrored across 50).
+  // Prior asymmetry (LONG 40-75 vs SHORT 25-60) gave LONG a structurally
+  // wider band so SHORT setups failed RSI_ZONE more often than LONG even at
+  // identical extremity. SHORT now uses 25-60 mirrored to LONG's 40-75 by
+  // width but anchored to the bear midpoint.
   const rsiOk = direction === "LONG"
     ? tr.rsi > 40 && tr.rsi < 75
     : direction === "SHORT"
@@ -223,17 +235,31 @@ function buildAuditChecks(
     weight: 0.2,
   });
 
-  const oiOk = direction === "LONG"
-    ? oi.dominantSide !== "SHORT"
-    : direction === "SHORT"
-    ? oi.dominantSide !== "LONG"
-    : true;
-  checks.push({
-    name: "OI_CONTEXT",
-    result: oiOk ? "PASS" : "WARN",
-    detail: `Dominant side: ${oi.dominantSide}. Funding rate: ${(oi.fundingRate * 100).toFixed(4)}%. Signal direction: ${direction}.`,
-    weight: 0.2,
-  });
+  // OI_CONTEXT only contributes weight when the OI block is REAL data.
+  // ESTIMATED OI is mathematically derived from regime + price, so letting
+  // it grade the verdict creates a self-confirming loop where the audit
+  // approves whatever the regime already implied. SKIP excludes this check
+  // from the weighted score entirely.
+  if (oi.dataConfidence === "ESTIMATED") {
+    checks.push({
+      name: "OI_CONTEXT",
+      result: "SKIP",
+      detail: `OI/funding are ESTIMATED (synthetic from regime+price). Skipping to avoid self-confirming evidence.`,
+      weight: 0.2,
+    });
+  } else {
+    const oiOk = direction === "LONG"
+      ? oi.dominantSide !== "SHORT"
+      : direction === "SHORT"
+      ? oi.dominantSide !== "LONG"
+      : true;
+    checks.push({
+      name: "OI_CONTEXT",
+      result: oiOk ? "PASS" : "WARN",
+      detail: `Dominant side: ${oi.dominantSide}. Funding rate: ${(oi.fundingRate * 100).toFixed(4)}%. Signal direction: ${direction}.`,
+      weight: 0.2,
+    });
+  }
 
   const atrOk = tr.atr > 0;
   checks.push({
@@ -337,7 +363,8 @@ function computeVerdict(checks: AuditCheck[]): { verdict: Verdict; summary: stri
   };
 }
 
-function classifySetupFamily(regime: Regime, direction: Direction): SetupFamily {
+function classifySetupFamily(regime: Regime, direction: Direction, counterTrend = false): SetupFamily {
+  if (counterTrend && direction === "SHORT") return "COUNTER_TREND_SHORT_EXHAUSTION";
   if (regime === "BULL" && direction === "LONG") return "TREND_CONTINUATION_LONG";
   if (regime === "BEAR" && direction === "SHORT") return "TREND_CONTINUATION_SHORT";
   if (regime === "RANGING" && direction === "LONG") return "RANGE_LONG";
@@ -365,7 +392,17 @@ function assessNarrativeRisk(regime: Regime, reasonCodes: string[], oi: OIContex
   const momentumCount = reasonCodes.filter(c => momentumCodes.includes(c)).length;
 
   if (regime === "RANGING" && momentumCount >= 3) return "HIGH";
-  if (oi.dominantSide !== "NEUTRAL" && oi.dominantSide !== direction && Math.abs(oi.fundingRate) > 0.001) return "HIGH";
+  // The OI-opposition branch only fires on REAL data. With ESTIMATED OI
+  // (synthetic from regime+price) the dominantSide always agrees with the
+  // regime by construction, so applying this branch to ESTIMATED data
+  // mathematically guarantees counter-regime trades inherit HIGH narrative
+  // risk and get penalized — exactly the bias we are removing.
+  if (
+    oi.dataConfidence === "REAL" &&
+    oi.dominantSide !== "NEUTRAL" &&
+    oi.dominantSide !== direction &&
+    Math.abs(oi.fundingRate) > 0.001
+  ) return "HIGH";
   if (regime === "RANGING" && momentumCount >= 1) return "MEDIUM";
   // Symmetric resolution: BULL+LONG and BEAR+SHORT both reduce to LOW. Old DB
   // rows showing HIGH for BEAR+SHORT pre-date this branch and will not be
@@ -595,6 +632,11 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     fundingRate,
     longShortRatio,
     dominantSide,
+    // Today every value above is synthesized from regime + price (see
+    // SYNTHETIC_OI / SYNTHETIC_FUNDING quality flags below). When a real
+    // funding/OI source is wired up, set this to "REAL" and the audit gates
+    // (OI_CONTEXT, narrativeRisk, CROWDING_TOO_HIGH) will start contributing.
+    dataConfidence: "ESTIMATED",
   };
 
   // ── Direction + reason codes ────────────────────────────────────────────────
@@ -612,12 +654,33 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   const macdLongOk = macdResult.histogram > -0.25 * atrVal;
   const macdShortOk = macdResult.histogram < 0.25 * atrVal;
 
+  // Counter-trend SHORT exhaustion: in a confirmed BULL regime, when price
+  // is overextended above EMA21 (>2·ATR), RSI is exhausted (>75), MACD
+  // histogram is cooling (< 0.25·ATR), and 24h move is parabolic (>5%), admit
+  // a SHORT against the trend. This is intentionally narrow — most BULL
+  // regimes do NOT meet all four conditions — and downstream the R/R floor is
+  // raised to 2.0 to keep audit discipline. Without this branch the engine
+  // structurally cannot SHORT a BULL regime even at obvious top patterns.
+  let counterTrendShort = false;
+  const counterTrendShortOk =
+    regime === "BULL" &&
+    rsiVal > 75 &&
+    ema21Val > 0 &&
+    atrVal > 0 &&
+    currentPrice > ema21Val + 2 * atrVal &&
+    macdResult.histogram < 0.25 * atrVal &&
+    priceChangePct24h > 5;
+
   if (regime === "BULL" && macdLongOk && rsiVal > 50 && rsiVal < 75) {
     direction = "LONG";
     reasonCodes.push("BULL_REGIME", "MACD_POSITIVE", "RSI_MIDZONE");
   } else if (regime === "BEAR" && macdShortOk && rsiVal >= 30 && rsiVal < 50) {
     direction = "SHORT";
     reasonCodes.push("BEAR_REGIME", "MACD_NEGATIVE", "RSI_MIDZONE");
+  } else if (counterTrendShortOk) {
+    direction = "SHORT";
+    counterTrendShort = true;
+    reasonCodes.push("COUNTER_TREND_SHORT_EXHAUSTION", "RSI_OVERBOUGHT", "PRICE_OVEREXTENDED");
   } else {
     direction = "WAIT";
     reasonCodes.push("REGIME_UNCLEAR");
@@ -687,7 +750,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
       ? currentPrice + atrFactor * 1.5
       : currentPrice;
 
-  const setupFamily = classifySetupFamily(regime, direction);
+  const setupFamily = classifySetupFamily(regime, direction, counterTrendShort);
   const entryQuality = assessEntryQuality(currentPrice, ema9Val, atrVal, direction, constraints.lateEntryAtrMultiplier);
   const narrativeRisk = assessNarrativeRisk(regime, reasonCodes, oiContext, direction);
   const rrRatio = computeRR(entryZoneHigh, entryZoneLow, targetZone, invalidationPrice, direction);
@@ -745,7 +808,14 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     direction = "WAIT";
     if (!rejectionCodes.includes("NO_INVALIDATION")) rejectionCodes.push("NO_INVALIDATION");
   }
-  if (rrRatio < constraints.minRRThreshold && direction !== "WAIT") {
+  // Counter-trend SHORTs use a stricter R/R floor (max(2.0, configured min))
+  // because they trade against the prevailing regime — the higher reward
+  // multiple compensates for the lower base rate. Trend-aligned setups keep
+  // the configured floor.
+  const effectiveRRFloor = counterTrendShort
+    ? Math.max(2.0, constraints.minRRThreshold)
+    : constraints.minRRThreshold;
+  if (rrRatio < effectiveRRFloor && direction !== "WAIT") {
     direction = "WAIT";
     rejectionCodes.push("RR_BELOW_THRESHOLD");
   }
@@ -767,7 +837,15 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   if (setupFamily === "RANGE_LONG" || setupFamily === "RANGE_SHORT") {
     rejectionCodes.push("RANGE_SECONDARY");
   }
-  if ((oiContext.fundingRate > 0.001 && direction === "LONG") || (oiContext.fundingRate < -0.001 && direction === "SHORT")) {
+  // CROWDING_TOO_HIGH is suppressed when funding is ESTIMATED. Synthetic
+  // funding flips sign with regime, so on ESTIMATED data this check would
+  // tag every BULL+LONG and BEAR+SHORT trade as crowded — a meaningless
+  // signal. Re-enables automatically when dataConfidence flips to REAL.
+  if (
+    oiContext.dataConfidence === "REAL" &&
+    ((oiContext.fundingRate > 0.001 && direction === "LONG") ||
+     (oiContext.fundingRate < -0.001 && direction === "SHORT"))
+  ) {
     rejectionCodes.push("CROWDING_TOO_HIGH");
   }
 

@@ -34,7 +34,8 @@ export interface Signal {
   /** Whether the signal passes structural logic rules. Separate from market direction and from the DJZS audit verdict.
    */
   logicAdmissibility: SignalLogicAdmissibility;
-  /** Classified setup type. Trend continuation is the primary family. */
+  /** Classified setup type. Trend continuation is the primary family. COUNTER_TREND_SHORT_EXHAUSTION admits SHORT signals against a BULL regime when overextension + RSI exhaustion + cooling MACD coincide; graded with stricter R/R floor to keep audit discipline.
+   */
   setupFamily: SignalSetupFamily;
   /** Quality grade for the entry timing based on ATR extension and structure. */
   entryQuality: SignalEntryQuality;

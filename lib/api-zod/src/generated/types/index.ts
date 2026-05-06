@@ -32,6 +32,7 @@ export * from "./dataProvenanceSource";
 export * from "./dataQualityReport";
 export * from "./dataQualityReportFlagsItem";
 export * from "./dataQualityReportGrade";
+export * from "./dstPipelineHealth";
 export * from "./evalReviewItem";
 export * from "./evalReviewItemRecommendation";
 export * from "./getAuditByAssetParams";

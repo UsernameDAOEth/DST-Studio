@@ -57,10 +57,11 @@ export const GetSignalsResponseItem = zod
         "TREND_CONTINUATION_SHORT",
         "RANGE_LONG",
         "RANGE_SHORT",
+        "COUNTER_TREND_SHORT_EXHAUSTION",
         "NO_SETUP",
       ])
       .describe(
-        "Classified setup type. Trend continuation is the primary family.",
+        "Classified setup type. Trend continuation is the primary family. COUNTER_TREND_SHORT_EXHAUSTION admits SHORT signals against a BULL regime when overextension + RSI exhaustion + cooling MACD coincide; graded with stricter R\/R floor to keep audit discipline.\n",
       ),
     entryQuality: zod
       .enum(["OPTIMAL", "ACCEPTABLE", "LATE", "INVALID"])
@@ -152,10 +153,11 @@ export const GetSignalByAssetResponse = zod
         "TREND_CONTINUATION_SHORT",
         "RANGE_LONG",
         "RANGE_SHORT",
+        "COUNTER_TREND_SHORT_EXHAUSTION",
         "NO_SETUP",
       ])
       .describe(
-        "Classified setup type. Trend continuation is the primary family.",
+        "Classified setup type. Trend continuation is the primary family. COUNTER_TREND_SHORT_EXHAUSTION admits SHORT signals against a BULL regime when overextension + RSI exhaustion + cooling MACD coincide; graded with stricter R\/R floor to keep audit discipline.\n",
       ),
     entryQuality: zod
       .enum(["OPTIMAL", "ACCEPTABLE", "LATE", "INVALID"])
@@ -1063,6 +1065,7 @@ export const GetSignalFeedResponseItem = zod.object({
     "TREND_CONTINUATION_SHORT",
     "RANGE_LONG",
     "RANGE_SHORT",
+    "COUNTER_TREND_SHORT_EXHAUSTION",
     "NO_SETUP",
   ]),
   confidence: zod.number(),
@@ -2824,6 +2827,37 @@ export const GetPythSnapshotBySymbolResponse = zod
   .describe(
     "Canonical Pyth Hermes v2 market snapshot. Normalized from the \/v2\/updates\/price\/latest endpoint. provider is always PYTH_HERMES_V2. isStale = true when stalenessSec > 60. isConfidenceWide = true when confidence > 1% of price. This packet is attached to signal detail responses as price context; it never drives or overrides the DJZS verdict.\n",
   );
+
+/**
+ * Read-only telemetry for monitoring DST signal directional balance. Aggregates rows from the `signals` table where `computed_at` is within the last 7 days. `shortPipelineBroken` is true when SHORTs were emitted but none reached APPROVED — indicates the audit layer is killing every SHORT (root-cause symptom of the asymmetric-bias bug class).
+
+ * @summary SHORT/LONG/WAIT distribution + per-direction approval rates over the last 7 days
+ */
+export const GetDstPipelineHealthResponse = zod.object({
+  windowDays: zod
+    .number()
+    .describe("Rolling window in days used for the aggregation (currently 7)."),
+  longCount: zod.number(),
+  shortCount: zod.number(),
+  waitCount: zod.number(),
+  shortShareOfDirectional: zod
+    .number()
+    .describe("shortCount \/ max(1, shortCount + longCount). 0..1."),
+  longApprovalRate: zod
+    .number()
+    .describe("APPROVED LONGs \/ total LONGs. 0..1. Zero when no LONGs exist."),
+  shortApprovalRate: zod
+    .number()
+    .describe(
+      "APPROVED SHORTs \/ total SHORTs. 0..1. Zero when no SHORTs exist.",
+    ),
+  shortPipelineBroken: zod
+    .boolean()
+    .describe(
+      "True when shortCount > 0 and no SHORT reached APPROVED in the window. Surfaces the asymmetric-audit failure mode directly on the dashboard.\n",
+    ),
+  generatedAt: zod.coerce.date(),
+});
 
 /**
  * Returns the current Pyth Lazer connection status and the most recent cached tick per tracked asset (BTC, ETH, SOL). Prices stream via WebSocket at fixed_rate@1000ms (matches the entitlement of the configured API key) and are held in memory only — no DB persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.

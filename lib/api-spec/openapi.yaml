@@ -762,6 +762,25 @@ paths:
         "503":
           description: Pyth Hermes temporarily unavailable
 
+  /dst/pipeline-health:
+    get:
+      operationId: getDstPipelineHealth
+      tags: [dst]
+      summary: SHORT/LONG/WAIT distribution + per-direction approval rates over the last 7 days
+      description: >
+        Read-only telemetry for monitoring DST signal directional balance.
+        Aggregates rows from the `signals` table where `computed_at` is within
+        the last 7 days. `shortPipelineBroken` is true when SHORTs were emitted
+        but none reached APPROVED — indicates the audit layer is killing every
+        SHORT (root-cause symptom of the asymmetric-bias bug class).
+      responses:
+        "200":
+          description: Pipeline health snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DstPipelineHealth"
+
   /lazer/snapshot:
     get:
       operationId: getLazerSnapshot
@@ -783,6 +802,47 @@ paths:
 
 components:
   schemas:
+    DstPipelineHealth:
+      type: object
+      required:
+        - windowDays
+        - longCount
+        - shortCount
+        - waitCount
+        - shortShareOfDirectional
+        - longApprovalRate
+        - shortApprovalRate
+        - shortPipelineBroken
+        - generatedAt
+      properties:
+        windowDays:
+          type: integer
+          description: Rolling window in days used for the aggregation (currently 7).
+        longCount:
+          type: integer
+        shortCount:
+          type: integer
+        waitCount:
+          type: integer
+        shortShareOfDirectional:
+          type: number
+          description: shortCount / max(1, shortCount + longCount). 0..1.
+        longApprovalRate:
+          type: number
+          description: APPROVED LONGs / total LONGs. 0..1. Zero when no LONGs exist.
+        shortApprovalRate:
+          type: number
+          description: APPROVED SHORTs / total SHORTs. 0..1. Zero when no SHORTs exist.
+        shortPipelineBroken:
+          type: boolean
+          description: >
+            True when shortCount > 0 and no SHORT reached APPROVED in the
+            window. Surfaces the asymmetric-audit failure mode directly on the
+            dashboard.
+        generatedAt:
+          type: string
+          format: date-time
+
     HealthStatus:
       type: object
       properties:
@@ -830,8 +890,12 @@ components:
             market direction and from the DJZS audit verdict.
         setupFamily:
           type: string
-          enum: [TREND_CONTINUATION_LONG, TREND_CONTINUATION_SHORT, RANGE_LONG, RANGE_SHORT, NO_SETUP]
-          description: Classified setup type. Trend continuation is the primary family.
+          enum: [TREND_CONTINUATION_LONG, TREND_CONTINUATION_SHORT, RANGE_LONG, RANGE_SHORT, COUNTER_TREND_SHORT_EXHAUSTION, NO_SETUP]
+          description: >
+            Classified setup type. Trend continuation is the primary family.
+            COUNTER_TREND_SHORT_EXHAUSTION admits SHORT signals against a BULL
+            regime when overextension + RSI exhaustion + cooling MACD coincide;
+            graded with stricter R/R floor to keep audit discipline.
         entryQuality:
           type: string
           enum: [OPTIMAL, ACCEPTABLE, LATE, INVALID]
@@ -1290,7 +1354,7 @@ components:
           enum: [APPROVED, REJECTED, DEGRADED]
         setupFamily:
           type: string
-          enum: [TREND_CONTINUATION_LONG, TREND_CONTINUATION_SHORT, RANGE_LONG, RANGE_SHORT, NO_SETUP]
+          enum: [TREND_CONTINUATION_LONG, TREND_CONTINUATION_SHORT, RANGE_LONG, RANGE_SHORT, COUNTER_TREND_SHORT_EXHAUSTION, NO_SETUP]
         confidence:
           type: number
         rrRatio:

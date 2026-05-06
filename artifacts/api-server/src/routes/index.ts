@@ -10,6 +10,7 @@ import integrationsRouter from "./integrations";
 import hermesRouter from "./hermes";
 import pythRouter from "./pyth";
 import lazerRouter from "./lazer";
+import dstRouter from "./dst";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use("/integrations", integrationsRouter);
 router.use("/hermes", hermesRouter);
 router.use("/pyth", pythRouter);
 router.use("/lazer", lazerRouter);
+router.use("/dst", dstRouter);
 
 export default router;

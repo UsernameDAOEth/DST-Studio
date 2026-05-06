@@ -25,6 +25,7 @@ import type {
   CreateAlert,
   CreateHermesRunRequest,
   CreateWatchlistEntry,
+  DstPipelineHealth,
   GetAuditByAssetParams,
   GetHermesFindingsParams,
   GetHermesJobsParams,
@@ -3355,6 +3356,83 @@ export function useGetPythSnapshotBySymbol<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPythSnapshotBySymbolQueryOptions(symbol, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Read-only telemetry for monitoring DST signal directional balance. Aggregates rows from the `signals` table where `computed_at` is within the last 7 days. `shortPipelineBroken` is true when SHORTs were emitted but none reached APPROVED — indicates the audit layer is killing every SHORT (root-cause symptom of the asymmetric-bias bug class).
+
+ * @summary SHORT/LONG/WAIT distribution + per-direction approval rates over the last 7 days
+ */
+export const getGetDstPipelineHealthUrl = () => {
+  return `/api/dst/pipeline-health`;
+};
+
+export const getDstPipelineHealth = async (
+  options?: RequestInit,
+): Promise<DstPipelineHealth> => {
+  return customFetch<DstPipelineHealth>(getGetDstPipelineHealthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDstPipelineHealthQueryKey = () => {
+  return [`/api/dst/pipeline-health`] as const;
+};
+
+export const getGetDstPipelineHealthQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDstPipelineHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDstPipelineHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDstPipelineHealthQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDstPipelineHealth>>
+  > = ({ signal }) => getDstPipelineHealth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDstPipelineHealth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDstPipelineHealthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDstPipelineHealth>>
+>;
+export type GetDstPipelineHealthQueryError = ErrorType<unknown>;
+
+/**
+ * @summary SHORT/LONG/WAIT distribution + per-direction approval rates over the last 7 days
+ */
+
+export function useGetDstPipelineHealth<
+  TData = Awaited<ReturnType<typeof getDstPipelineHealth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDstPipelineHealth>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDstPipelineHealthQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
