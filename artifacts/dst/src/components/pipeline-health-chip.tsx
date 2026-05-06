@@ -26,6 +26,8 @@ function SignalDrilldown({ selection }: { selection: Selection }) {
     { bucket: selection.bucket, name: selection.name },
     { query: { queryKey: getGetDstShortBottleneckSignalsQueryKey(selection) } },
   );
+  const [assetFilter, setAssetFilter] = useState("");
+  const [verdictFilter, setVerdictFilter] = useState("");
 
   if (isLoading) {
     return (
@@ -48,12 +50,65 @@ function SignalDrilldown({ selection }: { selection: Selection }) {
       </div>
     );
   }
+  const verdictOptions = Array.from(
+    new Set(data.signals.map((s) => s.processVerdict).filter(Boolean)),
+  ).sort();
+  const assetQ = assetFilter.trim().toUpperCase();
+  const filtered = data.signals.filter((s) => {
+    if (assetQ && !s.asset.toUpperCase().includes(assetQ)) return false;
+    if (verdictFilter && s.processVerdict !== verdictFilter) return false;
+    return true;
+  });
   return (
     <div className="pl-3 py-1 space-y-0.5 border-l border-border/60">
       <div className="micro-label text-muted-foreground">
-        {data.total} SHORT{data.total === 1 ? "" : "S"} · {selection.name}
+        {filtered.length} / {data.total} SHORT{data.total === 1 ? "" : "S"} ·{" "}
+        {selection.name}
       </div>
-      {data.signals.map((s) => (
+      <div className="flex items-center gap-1.5 py-1">
+        <input
+          type="text"
+          value={assetFilter}
+          onChange={(e) => setAssetFilter(e.target.value)}
+          placeholder="filter asset…"
+          aria-label="Filter by asset"
+          data-testid="bottleneck-filter-asset"
+          className="font-mono text-[10px] bg-background border border-border px-1.5 py-0.5 w-[100px] focus:outline-none focus:border-primary"
+        />
+        <select
+          value={verdictFilter}
+          onChange={(e) => setVerdictFilter(e.target.value)}
+          aria-label="Filter by process verdict"
+          data-testid="bottleneck-filter-verdict"
+          className="font-mono text-[10px] bg-background border border-border px-1 py-0.5 focus:outline-none focus:border-primary"
+        >
+          <option value="">all verdicts</option>
+          {verdictOptions.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        {(assetFilter || verdictFilter) && (
+          <button
+            type="button"
+            onClick={() => {
+              setAssetFilter("");
+              setVerdictFilter("");
+            }}
+            data-testid="bottleneck-filter-clear"
+            className="font-mono text-[10px] text-muted-foreground hover:text-primary"
+          >
+            clear
+          </button>
+        )}
+      </div>
+      {filtered.length === 0 && (
+        <div className="font-mono text-[10px] text-muted-foreground py-1">
+          no SHORTs match filter
+        </div>
+      )}
+      {filtered.map((s) => (
         <Link
           key={s.id}
           href={`/audit/${s.asset}?signalId=${s.id}`}
