@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { useGetSignals, useGetMarketSnapshot, useGetSignalFeed } from "@workspace/api-client-react";
+import { useGetSignals, useGetMarketSnapshot, useGetSignalFeed, useGetLazerSnapshot, getGetLazerSnapshotQueryKey } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
@@ -42,12 +42,38 @@ function PipelineChips({ dataQuality }: { dataQuality?: { grade?: string; flags?
   );
 }
 
+function formatClockHM(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+}
+
+function PriceDivergenceChip({ snapshotPrice, lazerPrice }: { snapshotPrice: number; lazerPrice: number | null | undefined }) {
+  if (lazerPrice == null || !Number.isFinite(lazerPrice) || lazerPrice <= 0 || snapshotPrice <= 0) return null;
+  const deltaPct = ((snapshotPrice - lazerPrice) / lazerPrice) * 100;
+  const absPct = Math.abs(deltaPct);
+  const tone =
+    absPct >= 0.5 ? "chip-fail" :
+    absPct >= 0.1 ? "chip-warn" :
+    "chip-skip";
+  const sign = deltaPct >= 0 ? "+" : "";
+  return (
+    <span className={cn(tone, "text-[7px]")} title="DefiLlama snapshot price vs live Pyth Lazer oracle">
+      Δ PYTH {sign}{deltaPct.toFixed(absPct >= 0.1 ? 2 : 3)}%
+    </span>
+  );
+}
+
 function AssetCard({ asset }: { asset: string }) {
   const { data: signals, isLoading: isLoadingSignals } = useGetSignals();
   const { data: snapshots, isLoading: isLoadingMarket } = useGetMarketSnapshot();
+  const { data: lazerData } = useGetLazerSnapshot({
+    query: { queryKey: getGetLazerSnapshotQueryKey(), refetchInterval: 1000 },
+  });
 
   const signal = signals?.find((s) => s.asset === asset);
   const snapshot = snapshots?.find((s) => s.asset === asset);
+  const lazerFeed = lazerData?.feeds?.find((f) => f.asset === asset);
+  const lazerLive = lazerData?.status === "CONNECTED" && lazerFeed?.price != null
+    && (lazerFeed.ageMs == null || lazerFeed.ageMs <= 5000);
 
   if (isLoadingSignals || isLoadingMarket) {
     return (
@@ -103,12 +129,18 @@ function AssetCard({ asset }: { asset: string }) {
 
         <div className="p-4 space-y-3">
           <div className="flex justify-between items-end">
-            <div>
+            <div className="min-w-0">
               <div className="text-2xl font-mono text-foreground leading-none mb-1 mono-nums">
                 {formatCurrency(snapshot.price)}
               </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="micro-label text-muted-foreground/60 text-[8px]">
+                  DEFILLAMA @ {formatClockHM(snapshot.updatedAt)}
+                </span>
+                {lazerLive && <PriceDivergenceChip snapshotPrice={snapshot.price} lazerPrice={lazerFeed?.price} />}
+              </div>
               <div className={cn(
-                "text-xs font-mono mono-nums",
+                "text-xs font-mono mono-nums mt-1",
                 snapshot.priceChangePct24h >= 0 ? "text-primary" : "text-destructive"
               )}>
                 {formatPercent(snapshot.priceChangePct24h)} 24H
