@@ -28,6 +28,7 @@ function SignalDrilldown({ selection }: { selection: Selection }) {
   );
   const [assetFilter, setAssetFilter] = useState("");
   const [verdictFilter, setVerdictFilter] = useState("");
+  const [rangeHours, setRangeHours] = useState<number | null>(null);
 
   if (isLoading) {
     return (
@@ -54,11 +55,19 @@ function SignalDrilldown({ selection }: { selection: Selection }) {
     new Set(data.signals.map((s) => s.processVerdict).filter(Boolean)),
   ).sort();
   const assetQ = assetFilter.trim().toUpperCase();
+  const cutoffMs = rangeHours ? Date.now() - rangeHours * 3600_000 : null;
   const filtered = data.signals.filter((s) => {
     if (assetQ && !s.asset.toUpperCase().includes(assetQ)) return false;
     if (verdictFilter && s.processVerdict !== verdictFilter) return false;
+    if (cutoffMs !== null && new Date(s.computedAt).getTime() < cutoffMs)
+      return false;
     return true;
   });
+  const rangePresets: { label: string; hours: number | null }[] = [
+    { label: "24h", hours: 24 },
+    { label: "3d", hours: 72 },
+    { label: "7d", hours: null },
+  ];
   return (
     <div className="pl-3 py-1 space-y-0.5 border-l border-border/60">
       <div className="micro-label text-muted-foreground">
@@ -89,12 +98,34 @@ function SignalDrilldown({ selection }: { selection: Selection }) {
             </option>
           ))}
         </select>
-        {(assetFilter || verdictFilter) && (
+        <span className="text-muted-foreground/60 font-mono text-[10px]">|</span>
+        {rangePresets.map((p) => {
+          const active = rangeHours === p.hours;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => setRangeHours(p.hours)}
+              aria-pressed={active}
+              data-testid={`bottleneck-filter-range-${p.label}`}
+              className={cn(
+                "font-mono text-[10px] border px-1.5 py-0.5",
+                active
+                  ? "border-primary text-primary"
+                  : "border-border text-muted-foreground hover:text-primary",
+              )}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+        {(assetFilter || verdictFilter || rangeHours !== null) && (
           <button
             type="button"
             onClick={() => {
               setAssetFilter("");
               setVerdictFilter("");
+              setRangeHours(null);
             }}
             data-testid="bottleneck-filter-clear"
             className="font-mono text-[10px] text-muted-foreground hover:text-primary"
