@@ -192,7 +192,7 @@ export default function Stack() {
             {
               icon: Database,
               title: "EVIDENCE-FIRST INTEGRATION",
-              body: "DST integrates DefiLlama market data as the primary data layer, Pyth price confidence, and structured technical regime into a single audit verdict. Each data point either reinforces admissibility or triggers a rejection code.",
+              body: "DST integrates DefiLlama market data as the primary layer, real OKX perpetuals data (OI, funding, long-short ratio), Pyth price confidence, and structured technical regime into a single audit verdict. Each data point either reinforces admissibility or triggers a rejection code.",
             },
             {
               icon: Zap,
@@ -241,11 +241,27 @@ export default function Stack() {
           />
           <StackLayer
             phase="PHASE 3"
-            name="Pyth Network"
+            name="Pyth Network · Hermes REST"
             role="Live price confidence interval — degrades processVerdict when confidence is low"
             tool="PYTH HERMES REST API · FREE · NO KEY REQUIRED"
             status="LIVE"
-            note="Live BTC/ETH/SOL prices and confidence ratios. When enabled in Hermes constraints, low-confidence prices degrade APPROVED signals to DEGRADED."
+            note="Live BTC/ETH/SOL prices and confidence ratios. When enabled in Hermes constraints, low-confidence prices degrade APPROVED signals to DEGRADED. Audit-side verifier — separate from the real-time ticker below."
+          />
+          <StackLayer
+            phase="PHASE 3"
+            name="Pyth Lazer Stream"
+            role="Sub-second real-time price ticker on the dashboard — passive, additive, never feeds the audit"
+            tool="PYTH LAZER WEBSOCKET SDK · REQUIRES PYTH_LAZER_API_KEY"
+            status="LIVE"
+            note="Singleton WebSocket subscribes to BTC/ETH/SOL at fixed_rate@200ms. Latest tick held in memory only — no DB persistence. Powers the live ticker panel and the Δ PYTH divergence chip on each asset card. Signal engine and DJZS are unaffected whether this is configured or not."
+          />
+          <StackLayer
+            phase="PHASE 3"
+            name="OKX Perpetuals"
+            role="Real OI / funding rate / long-short ratio — drives the previously-dormant audit gates"
+            tool="OKX PUBLIC PERPS API · FREE · NO KEY"
+            status="LIVE"
+            note="Real open interest, funding rate, and long-short account ratio for BTC/ETH/SOL via OKX public endpoints. 5-minute per-asset cache; falls through to a synthetic block on geo-block / network failure so signals never depend on OKX availability. When real data flows, OIContext.dataConfidence flips to REAL and the OI_CONTEXT audit, narrative-OI opposition, and CROWDING_TOO_HIGH gates begin contributing — all three were dormant before."
           />
           <StackLayer
             phase="PHASE 4"
@@ -266,10 +282,10 @@ export default function Stack() {
           <StackLayer
             phase="PHASE 5"
             name="Hyblock"
-            role="OI delta, liquidation heatmap, and CVD enrichment for entry quality scoring"
+            role="Liquidation heatmap and CVD enrichment on top of OKX OI data"
             tool="HYBLOCK API · PAID"
             status="PLANNED"
-            note="Will enrich the open interest context used by the audit gate. Replaces synthetic OI estimates with real liquidation cluster and CVD data."
+            note="Refines the OKX-sourced OI context with liquidation cluster and CVD signals. OI and funding are already real via OKX — Hyblock adds microstructure detail for entry-quality scoring, not raw OI itself."
           />
           <StackLayer
             phase="PHASE 5"
@@ -282,10 +298,10 @@ export default function Stack() {
           <StackLayer
             phase="PHASE 5"
             name="MPP (Institutional Flow)"
-            role="Institutional positioning enrichment"
+            role="Institutional positioning enrichment on top of retail-side OKX L/S ratio"
             tool="MPP API · PAID"
             status="PLANNED"
-            note="Enrichment layer for crowding risk and dominant side assessment. Will replace synthetic long/short ratio estimates with real institutional flow data."
+            note="OKX already supplies a long-short account ratio for retail flow. MPP adds an institutional-side view of crowding and dominant positioning to refine the audit's crowding assessment."
           />
         </div>
       </div>
@@ -347,7 +363,8 @@ export default function Stack() {
                 { name: "DJZS AUDIT INTERFACE", status: "ACTIVE", note: "Submits DST proposals to the audit gate, reads verdict" },
                 { name: "PYTH CONFIDENCE READER", status: "OPTIONAL", note: "Live price confidence overlay — no key required" },
                 { name: "CONSTRAINTS ENFORCER", status: "ACTIVE", note: "Applies minRR, timeframe, waitBias on every scan" },
-                { name: "JOB TRACKER", status: "ACTIVE", note: "Tracks phases (DEFILAMMA → PYTH → DJZS → ROUTING) per job" },
+                { name: "OKX PERPS READER", status: "ACTIVE", note: "Real OI / funding / long-short ratio — drives crowding and OI gates" },
+                { name: "JOB TRACKER", status: "ACTIVE", note: "Tracks phases (DEFILAMMA → OKX → PYTH → DJZS → ROUTING) per job" },
                 { name: "FINDING INGESTER", status: "ACTIVE", note: "Accepts structured evidence from external agents" },
               ].map((s) => (
                 <div key={s.name} className="flex items-start gap-2">
