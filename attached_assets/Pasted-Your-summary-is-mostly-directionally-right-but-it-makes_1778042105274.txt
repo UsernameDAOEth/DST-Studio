@@ -1,0 +1,147 @@
+Your summary is **mostly directionally right**, but it makes one dangerous leap:
+
+**Hermes is real. Hermes trading autonomy is not the same thing as safe execution.**
+
+Official sources confirm Hermes Agent is a Nous Research open-source MIT agent released on **February 25, 2026**, designed to live on a server, remember what it learns, create/improve skills, run on a VPS, use Telegram/Discord/etc., and connect to MCP servers. ([NOUS RESEARCH][1])
+
+But the trading claims need tightening.
+
+## What is verified
+
+Hermes can be useful as a **24/7 trading research/operator agent**.
+
+It has persistent memory, auto-generated skills, scheduled automations, browser/web control, MCP support, sandboxed execution options, and messaging-platform control. ([Hermes Agent][2])
+
+It can connect to external tools through MCP. Composio’s Coinbase-Hermes guide shows how to connect Hermes to Coinbase through Composio CLI or Composio MCP. ([Composio][3])
+
+Hermes has a built-in Polymarket skill, but the official Hermes docs describe that skill as **read-only**: it queries Polymarket markets, prices, orderbooks, and history through public APIs with no authentication. That is data access, not trade execution. ([Hermes Agent][4])
+
+Hermes supports Docker/container backends and the docs recommend Docker/Daytona for unsafe or untrusted execution environments. ([Hermes Agent][5])
+
+## What is overclaimed
+
+The weak point in your pasted summary is this:
+
+> “Hermes can execute trades autonomously on Coinbase, KuCoin, and Polymarket.”
+
+That may be possible with custom MCP tools or exchange APIs, but the official sources I found do **not** prove broad, safe, native trading execution. The Coinbase Composio page mainly describes wallet visibility, balances, portfolio monitoring, wallet metadata, and workflow integration. ([Composio][3])
+
+So the correct framing is:
+
+**Hermes can operate the agent layer. It still needs a hardened execution layer before it should touch live capital.**
+
+For DJZS/DSTrading, this is actually good. Hermes should not be the trading brain by itself.
+
+## Best architecture for DSTrading
+
+Use Hermes as the **autonomous employee**.
+
+Use DJZS as the **deterministic risk court**.
+
+Use exchange APIs only as the **execution rail**.
+
+Flow:
+
+```text
+Hermes Agent
+  ↓
+Observes market data, news, wallets, orderbooks, funding, volatility
+  ↓
+Generates trade thesis
+  ↓
+DJZS/DST audit engine
+  ↓
+Deterministic verdict: PASS / FAIL / MANUAL_REVIEW
+  ↓
+Risk gate
+  ↓
+Exchange execution tool
+  ↓
+Receipt + post-trade learning
+```
+
+This preserves your core thesis:
+
+**Probabilistic agent generates possibilities. Deterministic system governs admissibility.**
+
+Hermes can say:
+
+> “BTC perp long looks attractive because funding is cooling, spot bid is strong, and liquidation clusters sit above price.”
+
+DJZS must then ask:
+
+> “Is this thesis structurally admissible? Is the evidence real? Is the model confusing narrative with signal? Is execution risk bounded?”
+
+Only after that should a trade become actionable.
+
+## The right role split
+
+| Layer           | Tool                                                       | Job                                                     |
+| --------------- | ---------------------------------------------------------- | ------------------------------------------------------- |
+| Agent layer     | Hermes                                                     | Research, monitor, summarize, propose                   |
+| Logic layer     | DJZS/DST                                                   | Audit thesis, score risk, produce deterministic verdict |
+| Data layer      | Pyth, DefiLlama, Coinglass, exchange APIs, Polymarket APIs | Market/context inputs                                   |
+| Execution layer | Custom MCP/exchange adapter                                | Place/cancel orders only after approval                 |
+| Safety layer    | Hardcoded risk engine                                      | Position limits, loss caps, kill switch                 |
+| Receipt layer   | Irys/Datachain                                             | Store proof of logic and trade rationale                |
+
+## Do not let Hermes trade directly at first
+
+The safe launch path is:
+
+1. **Read-only mode**
+   Hermes monitors markets and proposes trades. No order placement.
+
+2. **Paper-trade mode**
+   Hermes creates proposed orders. DJZS audits them. Simulated fills only.
+
+3. **Human-confirmed live mode**
+   Hermes proposes. DJZS audits. You approve manually.
+
+4. **Limited autonomous mode**
+   Only tiny size, subaccount only, no withdrawals, strict max loss, deterministic pass required.
+
+5. **Fuller automation**
+   Only after you have enough receipts showing the system avoids bad trades.
+
+## Minimum safety rules
+
+Hard-code these. Do not leave them to Hermes.
+
+```text
+WITHDRAWALS_DISABLED = true
+MAX_TRADE_SIZE = fixed dollar cap
+MAX_DAILY_LOSS = fixed dollar cap
+MAX_OPEN_POSITIONS = fixed count
+NO_TRADE_WITHOUT_DJZS_PASS = true
+NO_TRADE_WITHOUT_RECEIPT_HASH = true
+MANUAL_REVIEW_IF_VOLATILITY_SPIKE = true
+KILL_SWITCH = always available
+```
+
+Also version every Hermes-generated skill. A self-improving agent that silently changes its trading logic is a liability unless each skill update is logged, reviewed, and tied to performance.
+
+## My recommendation
+
+Yes, Hermes belongs in your stack.
+
+But not as “the trader.”
+
+Use it as:
+
+**Hermes Agent = autonomous market operator**
+**DJZS = adversarial logic auditor**
+**DST = deterministic admissibility doctrine**
+**Exchange MCP = constrained execution adapter**
+
+That gives you a real product angle:
+
+> **DSTrading turns autonomous agents into accountable traders by forcing every proposed trade through deterministic logic verification before execution.**
+
+That is stronger than “AI trading bot.” It is safer, more defensible, and more aligned with DJZS.
+
+[1]: https://nousresearch.com/releases/ "Releases - NOUS RESEARCH"
+[2]: https://hermes-agent.nousresearch.com/docs/ "Hermes Agent Documentation | Hermes Agent"
+[3]: https://composio.dev/toolkits/coinbase/framework/hermes-agent "How to integrate Coinbase with Hermes"
+[4]: https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/research/research-polymarket "Polymarket — Query Polymarket: markets, prices, orderbooks, history | Hermes Agent"
+[5]: https://hermes-agent.nousresearch.com/docs/user-guide/configuration "Configuration | Hermes Agent"
