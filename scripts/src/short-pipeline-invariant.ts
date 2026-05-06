@@ -1,15 +1,21 @@
 // SHORT pipeline invariant test.
 //
-// Issues a synthetic compute by calling the running API server's signal
-// recompute endpoint indirectly through HTTP isn't reasonable here, so this
-// invariant exercises only what is observable without the engine: it computes
-// what the audit layer would do for hand-crafted inputs that mirror the
-// counter-trend SHORT exhaustion case, and confirms the audit shape no longer
-// blocks SHORT outright when OI is ESTIMATED.
+// Two modes:
 //
-// Run with: pnpm --filter @workspace/scripts run short-pipeline-invariant
+//   pnpm --filter @workspace/scripts run short-pipeline-invariant
+//     Runs synthetic invariants against the audit-layer math and the R/R
+//     floor logic. Pure unit-test style; no DB, no network. This is the CI
+//     guard that the rebalance shape did not regress.
 //
-// Exit code 0 = invariants hold; non-zero = regression.
+//   pnpm --filter @workspace/scripts run short-pipeline-invariant:db
+//     Connects to the configured Postgres (DATABASE_URL) and surfaces what
+//     is actually happening to SHORTs in the last 7 days: counts by verdict,
+//     setup-family distribution, top reason_codes, top rejection_codes, and
+//     which audit checks are failing most often. Use this when the dashboard
+//     chip still reads "SHORT PIPELINE BROKEN" to identify the bottleneck.
+//
+// Exit code 0 = invariants hold (synthetic mode) / report printed (db mode).
+// Non-zero = regression in synthetic mode, or DB query failure in db mode.
 
 interface AuditCheck {
   name: string;
@@ -35,6 +41,14 @@ function computeWeightedVerdict(checks: AuditCheck[]): {
   if (failCount >= 2 || score < 0.4) return { verdict: "FAIL", score };
   if (failCount === 1 || score < 0.65) return { verdict: "WAIT", score };
   return { verdict: "PASS", score };
+}
+
+const args = process.argv.slice(2);
+const dbMode = args.includes("--db");
+
+if (dbMode) {
+  await runDbReport();
+  process.exit(0);
 }
 
 const failures: string[] = [];
@@ -107,3 +121,110 @@ console.log("SHORT pipeline invariants OK");
 console.log(`  INV1 SHORT+SKIP_OI verdict: ${r1.verdict} (score ${r1.score.toFixed(2)})`);
 console.log(`  INV2 SHORT+WARN_OI verdict: ${r2.verdict} (score ${r2.score.toFixed(2)})`);
 console.log(`  INV3 R/R floor cases: ${cases.length} passed`);
+
+export {};
+
+async function runDbReport(): Promise<void> {
+  const { db, signalsTable } = await import("@workspace/db");
+  const { gte, eq, and, desc } = await import("drizzle-orm");
+
+  const WINDOW_DAYS = 7;
+  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      id: signalsTable.id,
+      asset: signalsTable.asset,
+      computedAt: signalsTable.computedAt,
+      direction: signalsTable.direction,
+      processVerdict: signalsTable.processVerdict,
+      logicAdmissibility: signalsTable.logicAdmissibility,
+      setupFamily: signalsTable.setupFamily,
+      reasonCodes: signalsTable.reasonCodes,
+      rejectionCodes: signalsTable.rejectionCodes,
+      auditReport: signalsTable.auditReport,
+      rrRatio: signalsTable.rrRatio,
+    })
+    .from(signalsTable)
+    .where(and(eq(signalsTable.direction, "SHORT"), gte(signalsTable.computedAt, since)))
+    .orderBy(desc(signalsTable.computedAt));
+
+  console.log(`SHORT pipeline DB report — last ${WINDOW_DAYS} days`);
+  console.log(`  total SHORTs: ${rows.length}`);
+  if (rows.length === 0) {
+    console.log("  no SHORTs emitted in window — engine is not producing SHORT setups");
+    console.log("  next: lower setup-detection thresholds or wait for market conditions");
+    return;
+  }
+
+  const verdictCounts = new Map<string, number>();
+  const setupCounts = new Map<string, number>();
+  const reasonCounts = new Map<string, number>();
+  const rejectionCounts = new Map<string, number>();
+  const checkFailCounts = new Map<string, number>();
+  const checkSkipCounts = new Map<string, number>();
+  let approved = 0;
+
+  for (const r of rows) {
+    if (r.processVerdict === "APPROVED") approved++;
+    bump(verdictCounts, r.processVerdict ?? "UNKNOWN");
+    bump(setupCounts, r.setupFamily ?? "UNKNOWN");
+    for (const c of r.reasonCodes ?? []) bump(reasonCounts, c);
+    for (const c of r.rejectionCodes ?? []) bump(rejectionCounts, c);
+    const checks = (r.auditReport as { checks?: Array<{ name: string; result: string }> } | null)
+      ?.checks;
+    if (Array.isArray(checks)) {
+      for (const ch of checks) {
+        if (ch.result === "FAIL") bump(checkFailCounts, ch.name);
+        else if (ch.result === "SKIP") bump(checkSkipCounts, ch.name);
+      }
+    }
+  }
+
+  const approvalRate = rows.length > 0 ? (approved / rows.length) * 100 : 0;
+  console.log(`  approved: ${approved} (${approvalRate.toFixed(1)}%)`);
+  console.log(`  shortPipelineBroken: ${approved === 0 ? "YES" : "no"}`);
+
+  printSection("verdicts", verdictCounts);
+  printSection("setup families", setupCounts);
+  printSection("reason codes (top 10)", reasonCounts, 10);
+  printSection("rejection codes (top 10)", rejectionCounts, 10);
+  printSection("audit checks failing (top 10)", checkFailCounts, 10);
+  printSection("audit checks skipped (top 10)", checkSkipCounts, 10);
+
+  const oldest = rows[rows.length - 1];
+  const newest = rows[0];
+  if (oldest && newest) {
+    console.log(
+      `  window span: ${oldest.computedAt.toISOString()} → ${newest.computedAt.toISOString()}`,
+    );
+  }
+
+  if (approved === 0) {
+    const topBlocker =
+      pickTop(rejectionCounts) ?? pickTop(checkFailCounts) ?? pickTop(reasonCounts);
+    if (topBlocker) {
+      console.log(`  most likely SHORT bottleneck: ${topBlocker[0]} (${topBlocker[1]} hits)`);
+    }
+  }
+}
+
+function bump(m: Map<string, number>, k: string): void {
+  m.set(k, (m.get(k) ?? 0) + 1);
+}
+
+function printSection(label: string, m: Map<string, number>, limit?: number): void {
+  if (m.size === 0) return;
+  const entries = [...m.entries()].sort((a, b) => b[1] - a[1]);
+  const shown = limit ? entries.slice(0, limit) : entries;
+  console.log(`  ${label}:`);
+  for (const [k, v] of shown) console.log(`    ${v.toString().padStart(4)}  ${k}`);
+}
+
+function pickTop(m: Map<string, number>): [string, number] | undefined {
+  let top: [string, number] | undefined;
+  for (const e of m.entries()) {
+    if (!top || e[1] > top[1]) top = e;
+  }
+  return top;
+}

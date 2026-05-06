@@ -6,7 +6,12 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "short-pipeline-invariant": "tsx ./src/short-pipeline-invariant.ts",
+    "short-pipeline-invariant:db": "tsx ./src/short-pipeline-invariant.ts --db",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "drizzle-orm": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
