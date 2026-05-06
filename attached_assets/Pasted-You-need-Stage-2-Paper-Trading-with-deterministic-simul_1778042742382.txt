@@ -1,0 +1,775 @@
+You need **Stage 2: Paper Trading with deterministic simulated fills**.
+
+This code keeps your identity clean:
+
+```text
+Deterministic signal engine proposes.
+DJZS gates.
+Only PASS becomes a paper trade.
+Next Lazer tick fills it.
+Lazer stream marks it to market.
+Stops/targets close it.
+Track record proves whether the engine deserves live-trading risk.
+```
+
+The public site resolves as **DST — Deterministic Signal Trading**, so this is scoped to that app, not a generic Hermes dashboard. ([deterministic-signal.trading][1])
+
+---
+
+## 1. Add the paper trade types
+
+Create:
+
+```ts
+// src/lib/paper/types.ts
+
+export type TradeSide = "LONG" | "SHORT";
+export type TradeStatus = "PENDING_FILL" | "OPEN" | "CLOSED" | "CANCELLED";
+export type CloseReason = "TAKE_PROFIT" | "STOP_LOSS" | "MANUAL_CLOSE" | "KILL_SWITCH";
+
+export type SignalVerdict = "PASS" | "WAIT" | "FAIL";
+
+export interface DSTSignal {
+  id: string;
+  symbol: string; // BTC, ETH, SOL
+  side: TradeSide;
+  verdict: SignalVerdict;
+  entry?: number;
+  stopLoss: number;
+  takeProfit: number;
+  reasons: string[];
+  createdAt: string;
+}
+
+export interface LazerTick {
+  symbol: string;
+  bid?: number;
+  ask?: number;
+  price?: number;
+  timestamp: string;
+}
+
+export interface PaperTrade {
+  id: string;
+  signalId: string;
+  symbol: string;
+  side: TradeSide;
+
+  status: TradeStatus;
+
+  intendedEntry?: number;
+  fillPrice?: number;
+  currentPrice?: number;
+  stopLoss: number;
+  takeProfit: number;
+
+  notionalUsd: number;
+  quantity?: number;
+
+  slippageBps: number;
+
+  openedAt?: string;
+  closedAt?: string;
+
+  closePrice?: number;
+  closeReason?: CloseReason;
+
+  unrealizedPnlUsd: number;
+  realizedPnlUsd: number;
+  rMultiple?: number;
+
+  verdictSnapshot: SignalVerdict;
+  reasonsSnapshot: string[];
+
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+---
+
+## 2. Add the deterministic paper-trade engine
+
+```ts
+// src/lib/paper/paperEngine.ts
+
+import type {
+  CloseReason,
+  DSTSignal,
+  LazerTick,
+  PaperTrade,
+  TradeSide,
+} from "./types";
+
+const DEFAULT_SLIPPAGE_BPS = 5;
+const DEFAULT_NOTIONAL_USD = 1000;
+
+function uid(prefix: string) {
+  return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function midPrice(tick: LazerTick): number {
+  if (tick.bid && tick.ask) return (tick.bid + tick.ask) / 2;
+  if (tick.price) return tick.price;
+  throw new Error("Tick missing bid/ask or price");
+}
+
+function applyEntrySlippage(price: number, side: TradeSide, bps: number) {
+  const s = bps / 10_000;
+  return side === "LONG" ? price * (1 + s) : price * (1 - s);
+}
+
+function applyExitSlippage(price: number, side: TradeSide, bps: number) {
+  const s = bps / 10_000;
+  return side === "LONG" ? price * (1 - s) : price * (1 + s);
+}
+
+function calculateQuantity(notionalUsd: number, fillPrice: number) {
+  return notionalUsd / fillPrice;
+}
+
+function calculatePnlUsd(
+  side: TradeSide,
+  entry: number,
+  current: number,
+  quantity: number
+) {
+  if (side === "LONG") return (current - entry) * quantity;
+  return (entry - current) * quantity;
+}
+
+function calculateRiskUsd(
+  side: TradeSide,
+  entry: number,
+  stopLoss: number,
+  quantity: number
+) {
+  if (side === "LONG") return Math.max(entry - stopLoss, 0) * quantity;
+  return Math.max(stopLoss - entry, 0) * quantity;
+}
+
+export function createPaperTradeFromSignal(
+  signal: DSTSignal,
+  options?: {
+    notionalUsd?: number;
+    slippageBps?: number;
+  }
+): PaperTrade | null {
+  if (signal.verdict !== "PASS") return null;
+
+  const now = new Date().toISOString();
+
+  return {
+    id: uid("paper"),
+    signalId: signal.id,
+    symbol: signal.symbol,
+    side: signal.side,
+
+    status: "PENDING_FILL",
+
+    intendedEntry: signal.entry,
+    stopLoss: signal.stopLoss,
+    takeProfit: signal.takeProfit,
+
+    notionalUsd: options?.notionalUsd ?? DEFAULT_NOTIONAL_USD,
+    slippageBps: options?.slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+
+    unrealizedPnlUsd: 0,
+    realizedPnlUsd: 0,
+
+    verdictSnapshot: signal.verdict,
+    reasonsSnapshot: signal.reasons,
+
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function fillPendingTrade(trade: PaperTrade, tick: LazerTick): PaperTrade {
+  if (trade.status !== "PENDING_FILL") return trade;
+  if (trade.symbol !== tick.symbol) return trade;
+
+  const rawMid = midPrice(tick);
+  const fillPrice = applyEntrySlippage(rawMid, trade.side, trade.slippageBps);
+  const quantity = calculateQuantity(trade.notionalUsd, fillPrice);
+  const now = tick.timestamp;
+
+  return {
+    ...trade,
+    status: "OPEN",
+    fillPrice,
+    currentPrice: rawMid,
+    quantity,
+    openedAt: now,
+    updatedAt: now,
+  };
+}
+
+function shouldCloseTrade(
+  trade: PaperTrade,
+  price: number
+): { close: boolean; reason?: CloseReason; triggerPrice?: number } {
+  if (trade.status !== "OPEN") return { close: false };
+
+  if (trade.side === "LONG") {
+    if (price <= trade.stopLoss) {
+      return { close: true, reason: "STOP_LOSS", triggerPrice: trade.stopLoss };
+    }
+
+    if (price >= trade.takeProfit) {
+      return {
+        close: true,
+        reason: "TAKE_PROFIT",
+        triggerPrice: trade.takeProfit,
+      };
+    }
+  }
+
+  if (trade.side === "SHORT") {
+    if (price >= trade.stopLoss) {
+      return { close: true, reason: "STOP_LOSS", triggerPrice: trade.stopLoss };
+    }
+
+    if (price <= trade.takeProfit) {
+      return {
+        close: true,
+        reason: "TAKE_PROFIT",
+        triggerPrice: trade.takeProfit,
+      };
+    }
+  }
+
+  return { close: false };
+}
+
+export function markTradeToMarket(trade: PaperTrade, tick: LazerTick): PaperTrade {
+  if (trade.symbol !== tick.symbol) return trade;
+  if (trade.status === "CLOSED" || trade.status === "CANCELLED") return trade;
+
+  if (trade.status === "PENDING_FILL") {
+    return fillPendingTrade(trade, tick);
+  }
+
+  if (!trade.fillPrice || !trade.quantity) return trade;
+
+  const current = midPrice(tick);
+  const unrealizedPnlUsd = calculatePnlUsd(
+    trade.side,
+    trade.fillPrice,
+    current,
+    trade.quantity
+  );
+
+  const closeCheck = shouldCloseTrade(trade, current);
+
+  if (closeCheck.close && closeCheck.reason && closeCheck.triggerPrice) {
+    const closePrice = applyExitSlippage(
+      closeCheck.triggerPrice,
+      trade.side,
+      trade.slippageBps
+    );
+
+    const realizedPnlUsd = calculatePnlUsd(
+      trade.side,
+      trade.fillPrice,
+      closePrice,
+      trade.quantity
+    );
+
+    const riskUsd = calculateRiskUsd(
+      trade.side,
+      trade.fillPrice,
+      trade.stopLoss,
+      trade.quantity
+    );
+
+    return {
+      ...trade,
+      status: "CLOSED",
+      currentPrice: current,
+      closePrice,
+      closeReason: closeCheck.reason,
+      realizedPnlUsd,
+      unrealizedPnlUsd: 0,
+      rMultiple: riskUsd > 0 ? realizedPnlUsd / riskUsd : undefined,
+      closedAt: tick.timestamp,
+      updatedAt: tick.timestamp,
+    };
+  }
+
+  return {
+    ...trade,
+    currentPrice: current,
+    unrealizedPnlUsd,
+    updatedAt: tick.timestamp,
+  };
+}
+
+export function closeTradeManually(
+  trade: PaperTrade,
+  tick: LazerTick,
+  reason: CloseReason = "MANUAL_CLOSE"
+): PaperTrade {
+  if (trade.status !== "OPEN") return trade;
+  if (!trade.fillPrice || !trade.quantity) return trade;
+
+  const rawPrice = midPrice(tick);
+  const closePrice = applyExitSlippage(rawPrice, trade.side, trade.slippageBps);
+
+  const realizedPnlUsd = calculatePnlUsd(
+    trade.side,
+    trade.fillPrice,
+    closePrice,
+    trade.quantity
+  );
+
+  const riskUsd = calculateRiskUsd(
+    trade.side,
+    trade.fillPrice,
+    trade.stopLoss,
+    trade.quantity
+  );
+
+  return {
+    ...trade,
+    status: "CLOSED",
+    currentPrice: rawPrice,
+    closePrice,
+    closeReason: reason,
+    realizedPnlUsd,
+    unrealizedPnlUsd: 0,
+    rMultiple: riskUsd > 0 ? realizedPnlUsd / riskUsd : undefined,
+    closedAt: tick.timestamp,
+    updatedAt: tick.timestamp,
+  };
+}
+```
+
+---
+
+## 3. Add track-record metrics
+
+```ts
+// src/lib/paper/metrics.ts
+
+import type { PaperTrade } from "./types";
+
+export interface PaperTrackRecord {
+  totalTrades: number;
+  openTrades: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  totalRealizedPnlUsd: number;
+  totalUnrealizedPnlUsd: number;
+  averageR: number;
+  maxDrawdownUsd: number;
+}
+
+export function calculateTrackRecord(trades: PaperTrade[]): PaperTrackRecord {
+  const closed = trades.filter((t) => t.status === "CLOSED");
+  const open = trades.filter((t) => t.status === "OPEN");
+
+  const wins = closed.filter((t) => t.realizedPnlUsd > 0).length;
+  const losses = closed.filter((t) => t.realizedPnlUsd < 0).length;
+
+  const totalRealizedPnlUsd = closed.reduce(
+    (sum, t) => sum + t.realizedPnlUsd,
+    0
+  );
+
+  const totalUnrealizedPnlUsd = open.reduce(
+    (sum, t) => sum + t.unrealizedPnlUsd,
+    0
+  );
+
+  const rValues = closed
+    .map((t) => t.rMultiple)
+    .filter((r): r is number => typeof r === "number");
+
+  const averageR =
+    rValues.length > 0
+      ? rValues.reduce((sum, r) => sum + r, 0) / rValues.length
+      : 0;
+
+  let equity = 0;
+  let peak = 0;
+  let maxDrawdownUsd = 0;
+
+  for (const trade of closed) {
+    equity += trade.realizedPnlUsd;
+    peak = Math.max(peak, equity);
+    maxDrawdownUsd = Math.min(maxDrawdownUsd, equity - peak);
+  }
+
+  return {
+    totalTrades: trades.length,
+    openTrades: open.length,
+    closedTrades: closed.length,
+    wins,
+    losses,
+    winRate: closed.length > 0 ? wins / closed.length : 0,
+    totalRealizedPnlUsd,
+    totalUnrealizedPnlUsd,
+    averageR,
+    maxDrawdownUsd,
+  };
+}
+```
+
+---
+
+## 4. Add a simple local store first
+
+Use this before adding Postgres/Drizzle. It lets you ship Stage 2 fast.
+
+```ts
+// src/lib/paper/paperStore.ts
+
+import type { DSTSignal, LazerTick, PaperTrade } from "./types";
+import {
+  createPaperTradeFromSignal,
+  markTradeToMarket,
+  closeTradeManually,
+} from "./paperEngine";
+import { calculateTrackRecord } from "./metrics";
+
+const STORAGE_KEY = "dst_paper_trades_v1";
+
+function readTrades(): PaperTrade[] {
+  if (typeof window === "undefined") return [];
+
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  if (!raw) return [];
+
+  try {
+    return JSON.parse(raw) as PaperTrade[];
+  } catch {
+    return [];
+  }
+}
+
+function writeTrades(trades: PaperTrade[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
+}
+
+export function getPaperTrades() {
+  return readTrades();
+}
+
+export function proposePaperTrade(signal: DSTSignal) {
+  const trade = createPaperTradeFromSignal(signal, {
+    notionalUsd: 1000,
+    slippageBps: 5,
+  });
+
+  if (!trade) return null;
+
+  const trades = readTrades();
+  const exists = trades.some((t) => t.signalId === signal.id);
+
+  if (exists) return null;
+
+  const next = [trade, ...trades];
+  writeTrades(next);
+
+  return trade;
+}
+
+export function onLazerTickForPaperMode(tick: LazerTick) {
+  const trades = readTrades();
+
+  const next = trades.map((trade) => markTradeToMarket(trade, tick));
+
+  writeTrades(next);
+
+  return {
+    trades: next,
+    trackRecord: calculateTrackRecord(next),
+  };
+}
+
+export function manuallyClosePaperTrade(tradeId: string, tick: LazerTick) {
+  const trades = readTrades();
+
+  const next = trades.map((trade) =>
+    trade.id === tradeId ? closeTradeManually(trade, tick) : trade
+  );
+
+  writeTrades(next);
+
+  return next;
+}
+
+export function resetPaperMode() {
+  writeTrades([]);
+}
+```
+
+---
+
+## 5. Wire it into your signal flow
+
+Wherever your app currently produces a signal and audit verdict, add this:
+
+```ts
+import { proposePaperTrade } from "@/lib/paper/paperStore";
+
+function handleApprovedSignal(signal: DSTSignal) {
+  if (signal.verdict !== "PASS") return;
+
+  proposePaperTrade({
+    id: signal.id,
+    symbol: signal.symbol,
+    side: signal.side,
+    verdict: signal.verdict,
+    entry: signal.entry,
+    stopLoss: signal.stopLoss,
+    takeProfit: signal.takeProfit,
+    reasons: signal.reasons,
+    createdAt: signal.createdAt,
+  });
+}
+```
+
+This does the key thing:
+
+```text
+WAIT = no paper trade
+FAIL = no paper trade
+PASS = create PENDING_FILL trade
+next Lazer tick = fill trade
+```
+
+That is exactly the deterministic Stage 2 behavior you want.
+
+---
+
+## 6. Wire it into your Lazer tick stream
+
+Wherever your Lazer stream receives ticks:
+
+```ts
+import { onLazerTickForPaperMode } from "@/lib/paper/paperStore";
+
+function handleLazerTick(rawTick: any) {
+  const tick = {
+    symbol: rawTick.symbol,
+    bid: rawTick.bid,
+    ask: rawTick.ask,
+    price: rawTick.price,
+    timestamp: new Date().toISOString(),
+  };
+
+  const result = onLazerTickForPaperMode(tick);
+
+  console.log("Paper mode updated:", result.trackRecord);
+}
+```
+
+If your Lazer payload uses `productId`, `asset`, or `pair`, map it into `symbol`.
+
+---
+
+## 7. Add a Paper Mode dashboard component
+
+```tsx
+// src/components/PaperModePanel.tsx
+
+import { useEffect, useState } from "react";
+import type { PaperTrade } from "@/lib/paper/types";
+import { getPaperTrades } from "@/lib/paper/paperStore";
+import { calculateTrackRecord } from "@/lib/paper/metrics";
+
+function money(n: number) {
+  return `$${n.toFixed(2)}`;
+}
+
+function pct(n: number) {
+  return `${(n * 100).toFixed(1)}%`;
+}
+
+export function PaperModePanel() {
+  const [trades, setTrades] = useState<PaperTrade[]>([]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTrades(getPaperTrades());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const record = calculateTrackRecord(trades);
+
+  return (
+    <section className="rounded-2xl border border-zinc-800 bg-black/40 p-5 text-zinc-100">
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Paper Mode Track Record</h2>
+          <p className="text-sm text-zinc-400">
+            Deterministic simulated fills: next-tick mid + 5 bps slippage.
+          </p>
+        </div>
+
+        <div className="rounded-full border border-emerald-500/40 px-3 py-1 text-xs text-emerald-300">
+          PAPER MODE ACTIVE
+        </div>
+      </div>
+
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric label="Closed Trades" value={record.closedTrades} />
+        <Metric label="Win Rate" value={pct(record.winRate)} />
+        <Metric label="Realized PnL" value={money(record.totalRealizedPnlUsd)} />
+        <Metric label="Avg R" value={record.averageR.toFixed(2)} />
+        <Metric label="Open Trades" value={record.openTrades} />
+        <Metric label="Unrealized PnL" value={money(record.totalUnrealizedPnlUsd)} />
+        <Metric label="Max Drawdown" value={money(record.maxDrawdownUsd)} />
+        <Metric label="Total Trades" value={record.totalTrades} />
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-zinc-800">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-zinc-900 text-zinc-400">
+            <tr>
+              <th className="p-3">Symbol</th>
+              <th className="p-3">Side</th>
+              <th className="p-3">Status</th>
+              <th className="p-3">Fill</th>
+              <th className="p-3">Current</th>
+              <th className="p-3">SL</th>
+              <th className="p-3">TP</th>
+              <th className="p-3">PnL</th>
+              <th className="p-3">R</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {trades.length === 0 ? (
+              <tr>
+                <td className="p-4 text-zinc-500" colSpan={9}>
+                  No paper trades yet. PASS signals will appear here after the
+                  next Lazer tick.
+                </td>
+              </tr>
+            ) : (
+              trades.map((trade) => {
+                const pnl =
+                  trade.status === "CLOSED"
+                    ? trade.realizedPnlUsd
+                    : trade.unrealizedPnlUsd;
+
+                return (
+                  <tr key={trade.id} className="border-t border-zinc-800">
+                    <td className="p-3 font-medium">{trade.symbol}</td>
+                    <td className="p-3">{trade.side}</td>
+                    <td className="p-3">{trade.status}</td>
+                    <td className="p-3">
+                      {trade.fillPrice ? trade.fillPrice.toFixed(2) : "Pending"}
+                    </td>
+                    <td className="p-3">
+                      {trade.currentPrice
+                        ? trade.currentPrice.toFixed(2)
+                        : "—"}
+                    </td>
+                    <td className="p-3">{trade.stopLoss.toFixed(2)}</td>
+                    <td className="p-3">{trade.takeProfit.toFixed(2)}</td>
+                    <td
+                      className={
+                        pnl >= 0 ? "p-3 text-emerald-300" : "p-3 text-red-300"
+                      }
+                    >
+                      {money(pnl)}
+                    </td>
+                    <td className="p-3">
+                      {trade.rMultiple !== undefined
+                        ? trade.rMultiple.toFixed(2)
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+      <div className="text-xs uppercase tracking-wide text-zinc-500">
+        {label}
+      </div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+```
+
+---
+
+## 8. Add the safety rule banner
+
+Put this near your footer where “PAPER MODE” currently appears.
+
+```tsx
+// src/components/SafetyRules.tsx
+
+const rules = [
+  "Read-only signal proposer",
+  "No live order placement",
+  "Only PASS creates paper trades",
+  "WAIT and FAIL never execute",
+  "Next-tick mid fill",
+  "5 bps slippage model",
+  "Stop/target enforced by Lazer ticks",
+  "Track record required before live trading",
+];
+
+export function SafetyRules() {
+  return (
+    <section className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4">
+      <h3 className="mb-3 text-sm font-semibold text-yellow-200">
+        DST Paper Mode Safety Rules
+      </h3>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        {rules.map((rule) => (
+          <div key={rule} className="text-sm text-zinc-300">
+            ✓ {rule}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+```
+
+---
+
+## Best next move
+
+Do **not** add Hermes yet.
+
+Your next production improvement should be:
+
+```text
+PASS signal → paper_trade created
+next Lazer tick → simulated fill
+every tick → MTM update
+SL/TP hit → trade closes
+dashboard → win rate, R multiple, max drawdown
+```
+
+That gives deterministic-signal.trading a real proof loop:
+
+**Signal quality becomes measurable.**
+
+Once you have 50–100 paper trades, then you’ll know whether Stage 3 is justified.
+
+[1]: https://deterministic-signal.trading/ "DST — Deterministic Signal Trading"
