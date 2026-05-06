@@ -15,6 +15,7 @@ import { normalizeInputs, hashPacket } from "./normalization";
 import { runFastPathVerification, type VerificationReport } from "./verification";
 import { getConstraints } from "../hermes/constraints";
 import { fetchPythSnapshot, type PythSnapshot } from "../pyth/pythClient";
+import { fetchPerpsSnapshot } from "./perpsClient";
 import {
   type DataQualityReport,
   type QualityFlag,
@@ -564,8 +565,8 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     qualityFlags.push("TVL_MISSING");
   }
 
-  qualityFlags.push("SYNTHETIC_OI");
-  qualityFlags.push("SYNTHETIC_FUNDING");
+  // SYNTHETIC_OI / SYNTHETIC_FUNDING are pushed below only if the OKX
+  // perps fetch fails — see the OI context block.
   qualityFlags.push("VOLUME_MISSING");
 
   // Pyth quality flags — derived from early-fetched snapshot
@@ -614,14 +615,40 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     trendStrength,
   };
 
-  // ── OI context (synthetic — flagged) ───────────────────────────────────────
-  const oiBase = globalInfo.totalOpenInterestUsd;
-  const oiShare: Record<string, number> = { ETH: 0.35, BTC: 0.45, SOL: 0.20 };
-  const estimatedOI = oiBase * (oiShare[asset] ?? 0.2);
-  const fundingMultiplier = regime === "BULL" ? 1 : regime === "BEAR" ? -1 : 0;
-  const fundingRate = 0.0001 * fundingMultiplier + (Math.random() - 0.5) * 0.00005;
-  const oiChangePct24h = priceChangePct24h * 0.5;
-  const longShortRatio = regime === "BULL" ? 1.3 : regime === "BEAR" ? 0.75 : 1.0;
+  // ── OI context (real OKX perps with synthetic fallback) ────────────────────
+  // Try the OKX public perps endpoints first. On success, dataConfidence
+  // flips to "REAL" and the audit gates (OI_CONTEXT, narrativeRisk OI
+  // opposition, CROWDING_TOO_HIGH) begin contributing. On any failure
+  // (network error, geo-block, malformed response, unsupported asset) we
+  // fall back to the original synthetic block and tag the data quality
+  // report with SYNTHETIC_OI + SYNTHETIC_FUNDING.
+  const perpsSnap = await fetchPerpsSnapshot(asset);
+
+  let estimatedOI: number;
+  let fundingRate: number;
+  let oiChangePct24h: number;
+  let longShortRatio: number;
+  let oiDataConfidence: "REAL" | "ESTIMATED";
+
+  if (perpsSnap) {
+    estimatedOI = perpsSnap.openInterestUsd;
+    fundingRate = perpsSnap.fundingRate;
+    oiChangePct24h = perpsSnap.oiChangePct24h;
+    longShortRatio = perpsSnap.longShortRatio;
+    oiDataConfidence = "REAL";
+  } else {
+    const oiBase = globalInfo.totalOpenInterestUsd;
+    const oiShare: Record<string, number> = { ETH: 0.35, BTC: 0.45, SOL: 0.20 };
+    estimatedOI = oiBase * (oiShare[asset] ?? 0.2);
+    const fundingMultiplier = regime === "BULL" ? 1 : regime === "BEAR" ? -1 : 0;
+    fundingRate = 0.0001 * fundingMultiplier + (Math.random() - 0.5) * 0.00005;
+    oiChangePct24h = priceChangePct24h * 0.5;
+    longShortRatio = regime === "BULL" ? 1.3 : regime === "BEAR" ? 0.75 : 1.0;
+    oiDataConfidence = "ESTIMATED";
+    qualityFlags.push("SYNTHETIC_OI");
+    qualityFlags.push("SYNTHETIC_FUNDING");
+  }
+
   const dominantSide = deriveSide(fundingRate, oiChangePct24h);
 
   const oiContext: OIContext = {
@@ -632,11 +659,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     fundingRate,
     longShortRatio,
     dominantSide,
-    // Today every value above is synthesized from regime + price (see
-    // SYNTHETIC_OI / SYNTHETIC_FUNDING quality flags below). When a real
-    // funding/OI source is wired up, set this to "REAL" and the audit gates
-    // (OI_CONTEXT, narrativeRisk, CROWDING_TOO_HIGH) will start contributing.
-    dataConfidence: "ESTIMATED",
+    dataConfidence: oiDataConfidence,
   };
 
   // ── Direction + reason codes ────────────────────────────────────────────────
@@ -1005,7 +1028,13 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     flags: dedupedFlags,
     priceProvenance: priceData?.provenance ?? makeProvenance("FALLBACK_ZERO", new Date(), null, PRICE_STALE_THRESHOLD_MS, true),
     historyProvenance: histData?.provenance ?? makeProvenance("FALLBACK_ZERO", new Date(), null, 3600000, true),
-    oiProvenance: makeProvenance("SYNTHETIC", new Date(), null, PRICE_STALE_THRESHOLD_MS, false),
+    oiProvenance: makeProvenance(
+      oiDataConfidence === "REAL" ? "OKX_PERPS" : "SYNTHETIC",
+      new Date(perpsSnap?.fetchedAt ?? Date.now()),
+      perpsSnap ? Date.now() - perpsSnap.fetchedAt : null,
+      PRICE_STALE_THRESHOLD_MS,
+      oiDataConfidence !== "REAL",
+    ),
     tvlProvenance: tvlData?.provenance ?? null,
     pythVerifier,
     historicalBarCount: hist.length,

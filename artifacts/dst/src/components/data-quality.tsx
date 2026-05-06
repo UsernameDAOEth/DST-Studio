@@ -93,6 +93,7 @@ function sourceLabel(source: string): string {
     DEFILLAMA_DERIVATIVES: "DefiLlama Derivatives",
     DEFILLAMA_TVL: "DefiLlama TVL",
     PYTH_HERMES: "Pyth Hermes REST",
+    OKX_PERPS: "OKX Perpetuals",
     SYNTHETIC: "Synthetic (estimated)",
     DERIVED: "Derived",
     FALLBACK_ZERO: "Fallback (zero)",

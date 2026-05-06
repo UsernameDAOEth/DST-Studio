@@ -14,6 +14,7 @@ export type DataSource =
   | "DEFILLAMA_DERIVATIVES"
   | "DEFILLAMA_TVL"
   | "PYTH_HERMES"
+  | "OKX_PERPS"
   | "SYNTHETIC"
   | "DERIVED"
   | "FALLBACK_ZERO"

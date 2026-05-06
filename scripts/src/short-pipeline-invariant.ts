@@ -111,6 +111,41 @@ for (const c of cases) {
   }
 }
 
+// Invariant 4: CROWDING_TOO_HIGH must fire when OI data is REAL and funding
+// is extreme in the trade direction; it must STAY suppressed when OI is
+// ESTIMATED (synthetic). This is the gate that #14 re-enables once the
+// OKX perps fetch succeeds. Pure replication of the engine rule at
+// signalEngine.ts: oiContext.dataConfidence === "REAL" && extreme funding.
+function detectCrowding(args: {
+  dataConfidence: "REAL" | "ESTIMATED";
+  fundingRate: number;
+  direction: "LONG" | "SHORT" | "WAIT";
+}): boolean {
+  return (
+    args.dataConfidence === "REAL" &&
+    ((args.fundingRate > 0.001 && args.direction === "LONG") ||
+      (args.fundingRate < -0.001 && args.direction === "SHORT"))
+  );
+}
+const crowdingCases: Array<{
+  name: string;
+  args: { dataConfidence: "REAL" | "ESTIMATED"; fundingRate: number; direction: "LONG" | "SHORT" | "WAIT" };
+  expected: boolean;
+}> = [
+  { name: "REAL + LONG + extreme positive funding", args: { dataConfidence: "REAL", fundingRate: 0.0015, direction: "LONG" }, expected: true },
+  { name: "REAL + SHORT + extreme negative funding", args: { dataConfidence: "REAL", fundingRate: -0.0015, direction: "SHORT" }, expected: true },
+  { name: "REAL + LONG + neutral funding", args: { dataConfidence: "REAL", fundingRate: 0.0001, direction: "LONG" }, expected: false },
+  { name: "REAL + LONG + extreme negative funding (wrong side)", args: { dataConfidence: "REAL", fundingRate: -0.0015, direction: "LONG" }, expected: false },
+  { name: "ESTIMATED + LONG + extreme positive funding (suppressed)", args: { dataConfidence: "ESTIMATED", fundingRate: 0.0015, direction: "LONG" }, expected: false },
+  { name: "ESTIMATED + SHORT + extreme negative funding (suppressed)", args: { dataConfidence: "ESTIMATED", fundingRate: -0.0015, direction: "SHORT" }, expected: false },
+];
+for (const c of crowdingCases) {
+  const got = detectCrowding(c.args);
+  if (got !== c.expected) {
+    failures.push(`INV4: detectCrowding ${c.name} expected ${c.expected}, got ${got}`);
+  }
+}
+
 if (failures.length > 0) {
   console.error("SHORT pipeline invariants FAILED:");
   for (const f of failures) console.error("  -", f);
@@ -121,6 +156,7 @@ console.log("SHORT pipeline invariants OK");
 console.log(`  INV1 SHORT+SKIP_OI verdict: ${r1.verdict} (score ${r1.score.toFixed(2)})`);
 console.log(`  INV2 SHORT+WARN_OI verdict: ${r2.verdict} (score ${r2.score.toFixed(2)})`);
 console.log(`  INV3 R/R floor cases: ${cases.length} passed`);
+console.log(`  INV4 CROWDING_TOO_HIGH cases: ${crowdingCases.length} passed`);
 
 export {};
 
