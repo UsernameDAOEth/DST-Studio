@@ -1522,6 +1522,44 @@ export interface SubmitFindingAccepted {
   createdAt: string;
 }
 
+/**
+ * Latest in-memory tick for one Pyth Lazer price feed. Nullable fields are present until the first message arrives for that feed.
+
+ */
+export interface LazerFeedTick {
+  asset: string;
+  priceFeedId: number;
+  price: number | null;
+  confidence: number | null;
+  exponent: number | null;
+  publishTimeMs: number | null;
+  ageMs: number | null;
+  receivedAt: number | null;
+}
+
+export type LazerSnapshotStatus =
+  (typeof LazerSnapshotStatus)[keyof typeof LazerSnapshotStatus];
+
+export const LazerSnapshotStatus = {
+  UNCONFIGURED: "UNCONFIGURED",
+  CONNECTING: "CONNECTING",
+  CONNECTED: "CONNECTED",
+  DISCONNECTED: "DISCONNECTED",
+  ERROR: "ERROR",
+} as const;
+
+/**
+ * Pyth Lazer real-time stream connection state plus the latest cached tick per tracked asset. Held in memory only — no DB persistence.
+
+ */
+export interface LazerSnapshot {
+  status: LazerSnapshotStatus;
+  lastError: string | null;
+  lastConnectedAt: number | null;
+  startedAt: number | null;
+  feeds: LazerFeedTick[];
+}
+
 export type GetSignalsParams = {
   /**
    * Filter by asset symbol (e.g. ETH, BTC, SOL)

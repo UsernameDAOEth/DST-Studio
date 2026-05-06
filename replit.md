@@ -47,6 +47,7 @@ The project is a pnpm workspace monorepo built with Node.js 24 and TypeScript 5.
     - **Findings Ingress**: Protected endpoint for submitting findings, validated by Zod, persisted to `hermes_findings` DB table, with content hashing for deduplication.
     - **Kanban Board**: In-memory operational console for tracking workflow tasks (SCAN_CREATE, FETCH_MARKET_CONTEXT, VERIFY_PRICE_STATE, COLLECT_HERMES_FINDINGS, COMPRESS_EVIDENCE, ATTACH_TO_AUDIT, ROUTE_RESULT) with retry mechanisms and blocked-state propagation.
 - **Pyth Client**: Integrates with Hermes REST API for secondary price-confidence verification.
+- **Pyth Lazer Stream** (additive, passive): Singleton WebSocket client (`artifacts/api-server/src/lib/dst/lazerClient.ts`) subscribes to BTC/ETH/SOL via `@pythnetwork/pyth-lazer-sdk` (channel `fixed_rate@200ms`). Latest tick per asset held in memory only — no DB persistence. Exposed via `GET /api/lazer/snapshot`. Rendered on dashboard by `LazerStreamPanel`. Status is `UNCONFIGURED` when `PYTH_LAZER_API_KEY` secret is missing; signal engine and Hermes are unaffected either way. Does NOT feed into signal generation or DJZS audit.
 - **DefiLlama Client**: Hardened data ingestion with `NormalizedPriceResult`, `NormalizedHistoryResult`, stale thresholds, and fallback flags.
 - **Agent Interpreter**: Processes chat commands for system interaction.
 - **DB Schema**: `signals` table includes `data_quality` jsonb column and comprehensive trade-related data. `hermes_findings` table stores audit findings.
@@ -68,6 +69,7 @@ The project is a pnpm workspace monorepo built with Node.js 24 and TypeScript 5.
 - **Data Providers**:
     - DefiLlama Coins API (for real-time prices and historical data)
     - Pyth Hermes REST API (for secondary price confidence verification)
+    - Pyth Lazer WebSocket stream via `@pythnetwork/pyth-lazer-sdk` (passive real-time price ticker; requires `PYTH_LAZER_API_KEY`)
 - **Messaging/Alerting (Scaffolded Integrations - configurable via env vars and UI toggle)**:
     - XMTP (wallet-to-wallet delivery)
     - Telegram (bot delivery)

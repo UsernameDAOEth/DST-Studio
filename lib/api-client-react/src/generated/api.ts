@@ -45,6 +45,7 @@ import type {
   HermesTask,
   HermesWorker,
   IntegrationStatus,
+  LazerSnapshot,
   MarketSnapshot,
   PythFeedInfo,
   PythPriceData,
@@ -3354,6 +3355,83 @@ export function useGetPythSnapshotBySymbol<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPythSnapshotBySymbolQueryOptions(symbol, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the current Pyth Lazer connection status and the most recent cached tick per tracked asset (BTC, ETH, SOL). Prices stream via WebSocket at fixed_rate@200ms and are held in memory only — no DB persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.
+
+ * @summary Latest in-memory snapshot from the Pyth Lazer real-time WebSocket stream
+ */
+export const getGetLazerSnapshotUrl = () => {
+  return `/api/lazer/snapshot`;
+};
+
+export const getLazerSnapshot = async (
+  options?: RequestInit,
+): Promise<LazerSnapshot> => {
+  return customFetch<LazerSnapshot>(getGetLazerSnapshotUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLazerSnapshotQueryKey = () => {
+  return [`/api/lazer/snapshot`] as const;
+};
+
+export const getGetLazerSnapshotQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLazerSnapshot>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLazerSnapshot>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLazerSnapshotQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLazerSnapshot>>
+  > = ({ signal }) => getLazerSnapshot({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLazerSnapshot>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLazerSnapshotQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLazerSnapshot>>
+>;
+export type GetLazerSnapshotQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Latest in-memory snapshot from the Pyth Lazer real-time WebSocket stream
+ */
+
+export function useGetLazerSnapshot<
+  TData = Awaited<ReturnType<typeof getLazerSnapshot>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLazerSnapshot>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLazerSnapshotQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

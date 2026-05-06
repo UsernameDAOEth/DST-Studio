@@ -6,6 +6,7 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/
 import { ArrowRight, ShieldOff, Radio, AlertTriangle, Scan } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProcessVerdictBadge, SetupFamilyLabel, VerdictBadge, gateDisplayVerdict } from "@/components/signal-process";
+import { LazerStreamPanel } from "@/components/lazer-stream-panel";
 
 function DirectionChip({ direction }: { direction: string }) {
   if (direction === "LONG") return <span className="chip-long">{direction}</span>;
@@ -201,6 +202,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <LazerStreamPanel />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <AssetCard asset="ETH" />

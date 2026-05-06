@@ -2824,3 +2824,41 @@ export const GetPythSnapshotBySymbolResponse = zod
   .describe(
     "Canonical Pyth Hermes v2 market snapshot. Normalized from the \/v2\/updates\/price\/latest endpoint. provider is always PYTH_HERMES_V2. isStale = true when stalenessSec > 60. isConfidenceWide = true when confidence > 1% of price. This packet is attached to signal detail responses as price context; it never drives or overrides the DJZS verdict.\n",
   );
+
+/**
+ * Returns the current Pyth Lazer connection status and the most recent cached tick per tracked asset (BTC, ETH, SOL). Prices stream via WebSocket at fixed_rate@200ms and are held in memory only — no DB persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.
+
+ * @summary Latest in-memory snapshot from the Pyth Lazer real-time WebSocket stream
+ */
+export const GetLazerSnapshotResponse = zod
+  .object({
+    status: zod.enum([
+      "UNCONFIGURED",
+      "CONNECTING",
+      "CONNECTED",
+      "DISCONNECTED",
+      "ERROR",
+    ]),
+    lastError: zod.string().nullable(),
+    lastConnectedAt: zod.number().nullable(),
+    startedAt: zod.number().nullable(),
+    feeds: zod.array(
+      zod
+        .object({
+          asset: zod.string(),
+          priceFeedId: zod.number(),
+          price: zod.number().nullable(),
+          confidence: zod.number().nullable(),
+          exponent: zod.number().nullable(),
+          publishTimeMs: zod.number().nullable(),
+          ageMs: zod.number().nullable(),
+          receivedAt: zod.number().nullable(),
+        })
+        .describe(
+          "Latest in-memory tick for one Pyth Lazer price feed. Nullable fields are present until the first message arrives for that feed.\n",
+        ),
+    ),
+  })
+  .describe(
+    "Pyth Lazer real-time stream connection state plus the latest cached tick per tracked asset. Held in memory only — no DB persistence.\n",
+  );

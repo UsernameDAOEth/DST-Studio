@@ -9,6 +9,7 @@ import agentRouter from "./agent";
 import integrationsRouter from "./integrations";
 import hermesRouter from "./hermes";
 import pythRouter from "./pyth";
+import lazerRouter from "./lazer";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use("/agent", agentRouter);
 router.use("/integrations", integrationsRouter);
 router.use("/hermes", hermesRouter);
 router.use("/pyth", pythRouter);
+router.use("/lazer", lazerRouter);
 
 export default router;

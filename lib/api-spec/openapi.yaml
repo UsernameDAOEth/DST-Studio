@@ -762,6 +762,24 @@ paths:
         "503":
           description: Pyth Hermes temporarily unavailable
 
+  /lazer/snapshot:
+    get:
+      operationId: getLazerSnapshot
+      tags: [lazer]
+      summary: Latest in-memory snapshot from the Pyth Lazer real-time WebSocket stream
+      description: >
+        Returns the current Pyth Lazer connection status and the most recent
+        cached tick per tracked asset (BTC, ETH, SOL). Prices stream via
+        WebSocket at fixed_rate@200ms and are held in memory only — no DB
+        persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.
+      responses:
+        "200":
+          description: Lazer connection status and per-asset latest ticks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LazerSnapshot"
+
 components:
   schemas:
     HealthStatus:
@@ -2708,3 +2726,70 @@ components:
         - suggestedFlagHints
         - boundaryReminder
         - attachedAt
+
+    LazerFeedTick:
+      type: object
+      description: >
+        Latest in-memory tick for one Pyth Lazer price feed. Nullable
+        fields are present until the first message arrives for that feed.
+      properties:
+        asset:
+          type: string
+        priceFeedId:
+          type: integer
+        price:
+          type: number
+          nullable: true
+        confidence:
+          type: number
+          nullable: true
+        exponent:
+          type: integer
+          nullable: true
+        publishTimeMs:
+          type: number
+          nullable: true
+        ageMs:
+          type: number
+          nullable: true
+        receivedAt:
+          type: number
+          nullable: true
+      required:
+        - asset
+        - priceFeedId
+        - price
+        - confidence
+        - exponent
+        - publishTimeMs
+        - ageMs
+        - receivedAt
+
+    LazerSnapshot:
+      type: object
+      description: >
+        Pyth Lazer real-time stream connection state plus the latest cached
+        tick per tracked asset. Held in memory only — no DB persistence.
+      properties:
+        status:
+          type: string
+          enum: [UNCONFIGURED, CONNECTING, CONNECTED, DISCONNECTED, ERROR]
+        lastError:
+          type: string
+          nullable: true
+        lastConnectedAt:
+          type: number
+          nullable: true
+        startedAt:
+          type: number
+          nullable: true
+        feeds:
+          type: array
+          items:
+            $ref: "#/components/schemas/LazerFeedTick"
+      required:
+        - status
+        - lastError
+        - lastConnectedAt
+        - startedAt
+        - feeds
