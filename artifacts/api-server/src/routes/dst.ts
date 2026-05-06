@@ -152,4 +152,89 @@ router.get("/pipeline-health/short-bottleneck", async (req, res): Promise<void> 
   }
 });
 
+const VALID_BUCKETS = new Set([
+  "rejection",
+  "reason",
+  "failingCheck",
+  "skippedCheck",
+  "setup",
+  "verdict",
+]);
+
+router.get(
+  "/pipeline-health/short-bottleneck/signals",
+  async (req, res): Promise<void> => {
+    try {
+      const bucket = String(req.query.bucket ?? "");
+      const name = String(req.query.name ?? "");
+      if (!VALID_BUCKETS.has(bucket) || name.length === 0) {
+        res.status(400).json({ error: "invalid_bucket_or_name" });
+        return;
+      }
+
+      const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const rows = await db
+        .select({
+          id: signalsTable.id,
+          asset: signalsTable.asset,
+          computedAt: signalsTable.computedAt,
+          processVerdict: signalsTable.processVerdict,
+          setupFamily: signalsTable.setupFamily,
+          reasonCodes: signalsTable.reasonCodes,
+          rejectionCodes: signalsTable.rejectionCodes,
+          auditReport: signalsTable.auditReport,
+          thesis: signalsTable.thesis,
+        })
+        .from(signalsTable)
+        .where(
+          and(eq(signalsTable.direction, "SHORT"), gte(signalsTable.computedAt, since)),
+        )
+        .orderBy(desc(signalsTable.computedAt));
+
+      const matches = rows.filter((r) => {
+        switch (bucket) {
+          case "rejection":
+            return (r.rejectionCodes ?? []).includes(name);
+          case "reason":
+            return (r.reasonCodes ?? []).includes(name);
+          case "setup":
+            return (r.setupFamily ?? "UNKNOWN") === name;
+          case "verdict":
+            return (r.processVerdict ?? "UNKNOWN") === name;
+          case "failingCheck":
+          case "skippedCheck": {
+            const target = bucket === "failingCheck" ? "FAIL" : "SKIP";
+            const checks = (
+              r.auditReport as { checks?: Array<{ name: string; result: string }> } | null
+            )?.checks;
+            if (!Array.isArray(checks)) return false;
+            return checks.some((c) => c.name === name && c.result === target);
+          }
+          default:
+            return false;
+        }
+      });
+
+      res.json({
+        windowDays: WINDOW_DAYS,
+        bucket,
+        name,
+        total: matches.length,
+        signals: matches.map((r) => ({
+          id: r.id,
+          asset: r.asset,
+          computedAt: r.computedAt.toISOString(),
+          processVerdict: r.processVerdict,
+          setupFamily: r.setupFamily,
+          thesis: r.thesis,
+        })),
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      req.log.error({ err }, "short-bottleneck signals query failed");
+      res.status(500).json({ error: "short_bottleneck_signals_query_failed" });
+    }
+  },
+);
+
 export default router;

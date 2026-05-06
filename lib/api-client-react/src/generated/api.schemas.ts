@@ -50,6 +50,36 @@ export interface DstShortBottleneck {
   generatedAt: string;
 }
 
+export interface DstShortBottleneckSignal {
+  id: number;
+  asset: string;
+  computedAt: string;
+  processVerdict: string;
+  setupFamily: string;
+  thesis: string;
+}
+
+export type DstShortBottleneckSignalsBucket =
+  (typeof DstShortBottleneckSignalsBucket)[keyof typeof DstShortBottleneckSignalsBucket];
+
+export const DstShortBottleneckSignalsBucket = {
+  rejection: "rejection",
+  reason: "reason",
+  failingCheck: "failingCheck",
+  skippedCheck: "skippedCheck",
+  setup: "setup",
+  verdict: "verdict",
+} as const;
+
+export interface DstShortBottleneckSignals {
+  windowDays: number;
+  bucket: DstShortBottleneckSignalsBucket;
+  name: string;
+  total: number;
+  signals: DstShortBottleneckSignal[];
+  generatedAt: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -1668,3 +1698,24 @@ export type SubmitHermesFinding400 = {
 export type GetHermesFindingsParams = {
   limit?: number;
 };
+
+export type GetDstShortBottleneckSignalsParams = {
+  bucket: GetDstShortBottleneckSignalsBucket;
+  /**
+   * The bucket value to filter by (e.g. "BEAR_REGIME", "RR_BELOW_THRESHOLD").
+   * @minLength 1
+   */
+  name: string;
+};
+
+export type GetDstShortBottleneckSignalsBucket =
+  (typeof GetDstShortBottleneckSignalsBucket)[keyof typeof GetDstShortBottleneckSignalsBucket];
+
+export const GetDstShortBottleneckSignalsBucket = {
+  rejection: "rejection",
+  reason: "reason",
+  failingCheck: "failingCheck",
+  skippedCheck: "skippedCheck",
+  setup: "setup",
+  verdict: "verdict",
+} as const;

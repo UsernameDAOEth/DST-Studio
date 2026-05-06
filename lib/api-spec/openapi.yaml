@@ -801,6 +801,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/DstShortBottleneck"
 
+  /dst/pipeline-health/short-bottleneck/signals:
+    get:
+      operationId: getDstShortBottleneckSignals
+      tags: [dst]
+      summary: SHORT signals from the last 7 days that fall into a specific bottleneck bucket
+      description: >
+        Returns the SHORT signals (last 7 days) that match a chosen bottleneck
+        bucket — e.g. all SHORTs whose rejection codes include `BEAR_REGIME`,
+        or whose audit report has a failing check named `RR_BELOW_THRESHOLD`.
+        Powers the "click a bucket row to see which signals hit it" drill-down
+        in the SHORT pipeline bottleneck panel. Read-only.
+      parameters:
+        - in: query
+          name: bucket
+          required: true
+          schema:
+            type: string
+            enum: [rejection, reason, failingCheck, skippedCheck, setup, verdict]
+        - in: query
+          name: name
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: The bucket value to filter by (e.g. "BEAR_REGIME", "RR_BELOW_THRESHOLD").
+      responses:
+        "200":
+          description: Matching SHORT signals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DstShortBottleneckSignals"
+        "400":
+          description: Missing or invalid bucket/name parameter
+
   /lazer/snapshot:
     get:
       operationId: getLazerSnapshot
@@ -937,6 +972,57 @@ components:
           items:
             $ref: "#/components/schemas/DstBottleneckBucket"
           description: Top 10 audit checks with result=SKIP.
+        generatedAt:
+          type: string
+          format: date-time
+
+    DstShortBottleneckSignal:
+      type: object
+      required:
+        - id
+        - asset
+        - computedAt
+        - processVerdict
+        - setupFamily
+        - thesis
+      properties:
+        id:
+          type: integer
+        asset:
+          type: string
+        computedAt:
+          type: string
+          format: date-time
+        processVerdict:
+          type: string
+        setupFamily:
+          type: string
+        thesis:
+          type: string
+
+    DstShortBottleneckSignals:
+      type: object
+      required:
+        - windowDays
+        - bucket
+        - name
+        - total
+        - signals
+        - generatedAt
+      properties:
+        windowDays:
+          type: integer
+        bucket:
+          type: string
+          enum: [rejection, reason, failingCheck, skippedCheck, setup, verdict]
+        name:
+          type: string
+        total:
+          type: integer
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/DstShortBottleneckSignal"
         generatedAt:
           type: string
           format: date-time

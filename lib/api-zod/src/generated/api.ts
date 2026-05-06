@@ -2925,6 +2925,54 @@ export const GetDstShortBottleneckResponse = zod.object({
 });
 
 /**
+ * Returns the SHORT signals (last 7 days) that match a chosen bottleneck bucket — e.g. all SHORTs whose rejection codes include `BEAR_REGIME`, or whose audit report has a failing check named `RR_BELOW_THRESHOLD`. Powers the "click a bucket row to see which signals hit it" drill-down in the SHORT pipeline bottleneck panel. Read-only.
+
+ * @summary SHORT signals from the last 7 days that fall into a specific bottleneck bucket
+ */
+
+export const GetDstShortBottleneckSignalsQueryParams = zod.object({
+  bucket: zod.enum([
+    "rejection",
+    "reason",
+    "failingCheck",
+    "skippedCheck",
+    "setup",
+    "verdict",
+  ]),
+  name: zod.coerce
+    .string()
+    .min(1)
+    .describe(
+      'The bucket value to filter by (e.g. \"BEAR_REGIME\", \"RR_BELOW_THRESHOLD\").',
+    ),
+});
+
+export const GetDstShortBottleneckSignalsResponse = zod.object({
+  windowDays: zod.number(),
+  bucket: zod.enum([
+    "rejection",
+    "reason",
+    "failingCheck",
+    "skippedCheck",
+    "setup",
+    "verdict",
+  ]),
+  name: zod.string(),
+  total: zod.number(),
+  signals: zod.array(
+    zod.object({
+      id: zod.number(),
+      asset: zod.string(),
+      computedAt: zod.coerce.date(),
+      processVerdict: zod.string(),
+      setupFamily: zod.string(),
+      thesis: zod.string(),
+    }),
+  ),
+  generatedAt: zod.coerce.date(),
+});
+
+/**
  * Returns the current Pyth Lazer connection status and the most recent cached tick per tracked asset (BTC, ETH, SOL). Prices stream via WebSocket at fixed_rate@1000ms (matches the entitlement of the configured API key) and are held in memory only — no DB persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.
 
  * @summary Latest in-memory snapshot from the Pyth Lazer real-time WebSocket stream

@@ -27,7 +27,9 @@ import type {
   CreateWatchlistEntry,
   DstPipelineHealth,
   DstShortBottleneck,
+  DstShortBottleneckSignals,
   GetAuditByAssetParams,
+  GetDstShortBottleneckSignalsParams,
   GetHermesFindingsParams,
   GetHermesJobsParams,
   GetHermesMetricsParams,
@@ -3511,6 +3513,117 @@ export function useGetDstShortBottleneck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDstShortBottleneckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the SHORT signals (last 7 days) that match a chosen bottleneck bucket — e.g. all SHORTs whose rejection codes include `BEAR_REGIME`, or whose audit report has a failing check named `RR_BELOW_THRESHOLD`. Powers the "click a bucket row to see which signals hit it" drill-down in the SHORT pipeline bottleneck panel. Read-only.
+
+ * @summary SHORT signals from the last 7 days that fall into a specific bottleneck bucket
+ */
+export const getGetDstShortBottleneckSignalsUrl = (
+  params: GetDstShortBottleneckSignalsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dst/pipeline-health/short-bottleneck/signals?${stringifiedParams}`
+    : `/api/dst/pipeline-health/short-bottleneck/signals`;
+};
+
+export const getDstShortBottleneckSignals = async (
+  params: GetDstShortBottleneckSignalsParams,
+  options?: RequestInit,
+): Promise<DstShortBottleneckSignals> => {
+  return customFetch<DstShortBottleneckSignals>(
+    getGetDstShortBottleneckSignalsUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDstShortBottleneckSignalsQueryKey = (
+  params?: GetDstShortBottleneckSignalsParams,
+) => {
+  return [
+    `/api/dst/pipeline-health/short-bottleneck/signals`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetDstShortBottleneckSignalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDstShortBottleneckSignals>>,
+  TError = ErrorType<void>,
+>(
+  params: GetDstShortBottleneckSignalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDstShortBottleneckSignals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDstShortBottleneckSignalsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDstShortBottleneckSignals>>
+  > = ({ signal }) =>
+    getDstShortBottleneckSignals(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDstShortBottleneckSignals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDstShortBottleneckSignalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDstShortBottleneckSignals>>
+>;
+export type GetDstShortBottleneckSignalsQueryError = ErrorType<void>;
+
+/**
+ * @summary SHORT signals from the last 7 days that fall into a specific bottleneck bucket
+ */
+
+export function useGetDstShortBottleneckSignals<
+  TData = Awaited<ReturnType<typeof getDstShortBottleneckSignals>>,
+  TError = ErrorType<void>,
+>(
+  params: GetDstShortBottleneckSignalsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDstShortBottleneckSignals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDstShortBottleneckSignalsQueryOptions(
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
