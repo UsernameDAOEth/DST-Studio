@@ -23,6 +23,33 @@ export interface DstPipelineHealth {
   generatedAt: string;
 }
 
+export interface DstBottleneckBucket {
+  name: string;
+  count: number;
+}
+
+export interface DstShortBottleneck {
+  windowDays: number;
+  totalShorts: number;
+  approvedShorts: number;
+  shortPipelineBroken: boolean;
+  /** Most likely SHORT bottleneck label (top rejection code, else top failing check, else top reason code). */
+  topBlocker?: string | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  verdicts: DstBottleneckBucket[];
+  setupFamilies: DstBottleneckBucket[];
+  /** Top 10 reason codes, descending by count. */
+  reasonCodes: DstBottleneckBucket[];
+  /** Top 10 rejection codes, descending by count. */
+  rejectionCodes: DstBottleneckBucket[];
+  /** Top 10 audit checks with result=FAIL. */
+  failingChecks: DstBottleneckBucket[];
+  /** Top 10 audit checks with result=SKIP. */
+  skippedChecks: DstBottleneckBucket[];
+  generatedAt: string;
+}
+
 export interface HealthStatus {
   status: string;
 }

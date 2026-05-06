@@ -2860,6 +2860,71 @@ export const GetDstPipelineHealthResponse = zod.object({
 });
 
 /**
+ * Aggregations over the last 7 days of SHORT signals: verdict counts, setup-family distribution, top reason codes, top rejection codes, and most-failing/skipped audit checks. Mirrors the `pnpm --filter @workspace/scripts run short-pipeline-invariant:db` report so the dashboard can surface the cause of "SHORT PIPELINE BROKEN" without shelling in. Read-only.
+
+ * @summary SHORT pipeline bottleneck breakdown for the last 7 days
+ */
+export const GetDstShortBottleneckResponse = zod.object({
+  windowDays: zod.number(),
+  totalShorts: zod.number(),
+  approvedShorts: zod.number(),
+  shortPipelineBroken: zod.boolean(),
+  topBlocker: zod
+    .string()
+    .nullish()
+    .describe(
+      "Most likely SHORT bottleneck label (top rejection code, else top failing check, else top reason code).",
+    ),
+  windowStart: zod.coerce.date().nullish(),
+  windowEnd: zod.coerce.date().nullish(),
+  verdicts: zod.array(
+    zod.object({
+      name: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  setupFamilies: zod.array(
+    zod.object({
+      name: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  reasonCodes: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        count: zod.number(),
+      }),
+    )
+    .describe("Top 10 reason codes, descending by count."),
+  rejectionCodes: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        count: zod.number(),
+      }),
+    )
+    .describe("Top 10 rejection codes, descending by count."),
+  failingChecks: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        count: zod.number(),
+      }),
+    )
+    .describe("Top 10 audit checks with result=FAIL."),
+  skippedChecks: zod
+    .array(
+      zod.object({
+        name: zod.string(),
+        count: zod.number(),
+      }),
+    )
+    .describe("Top 10 audit checks with result=SKIP."),
+  generatedAt: zod.coerce.date(),
+});
+
+/**
  * Returns the current Pyth Lazer connection status and the most recent cached tick per tracked asset (BTC, ETH, SOL). Prices stream via WebSocket at fixed_rate@1000ms (matches the entitlement of the configured API key) and are held in memory only — no DB persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.
 
  * @summary Latest in-memory snapshot from the Pyth Lazer real-time WebSocket stream

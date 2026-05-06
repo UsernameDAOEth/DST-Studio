@@ -781,6 +781,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/DstPipelineHealth"
 
+  /dst/pipeline-health/short-bottleneck:
+    get:
+      operationId: getDstShortBottleneck
+      tags: [dst]
+      summary: SHORT pipeline bottleneck breakdown for the last 7 days
+      description: >
+        Aggregations over the last 7 days of SHORT signals: verdict counts,
+        setup-family distribution, top reason codes, top rejection codes, and
+        most-failing/skipped audit checks. Mirrors the
+        `pnpm --filter @workspace/scripts run short-pipeline-invariant:db`
+        report so the dashboard can surface the cause of "SHORT PIPELINE BROKEN"
+        without shelling in. Read-only.
+      responses:
+        "200":
+          description: SHORT bottleneck breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DstShortBottleneck"
+
   /lazer/snapshot:
     get:
       operationId: getLazerSnapshot
@@ -839,6 +859,84 @@ components:
             True when shortCount > 0 and no SHORT reached APPROVED in the
             window. Surfaces the asymmetric-audit failure mode directly on the
             dashboard.
+        generatedAt:
+          type: string
+          format: date-time
+
+    DstBottleneckBucket:
+      type: object
+      required:
+        - name
+        - count
+      properties:
+        name:
+          type: string
+        count:
+          type: integer
+
+    DstShortBottleneck:
+      type: object
+      required:
+        - windowDays
+        - totalShorts
+        - approvedShorts
+        - shortPipelineBroken
+        - verdicts
+        - setupFamilies
+        - reasonCodes
+        - rejectionCodes
+        - failingChecks
+        - skippedChecks
+        - generatedAt
+      properties:
+        windowDays:
+          type: integer
+        totalShorts:
+          type: integer
+        approvedShorts:
+          type: integer
+        shortPipelineBroken:
+          type: boolean
+        topBlocker:
+          type: string
+          nullable: true
+          description: Most likely SHORT bottleneck label (top rejection code, else top failing check, else top reason code).
+        windowStart:
+          type: string
+          format: date-time
+          nullable: true
+        windowEnd:
+          type: string
+          format: date-time
+          nullable: true
+        verdicts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DstBottleneckBucket"
+        setupFamilies:
+          type: array
+          items:
+            $ref: "#/components/schemas/DstBottleneckBucket"
+        reasonCodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/DstBottleneckBucket"
+          description: Top 10 reason codes, descending by count.
+        rejectionCodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/DstBottleneckBucket"
+          description: Top 10 rejection codes, descending by count.
+        failingChecks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DstBottleneckBucket"
+          description: Top 10 audit checks with result=FAIL.
+        skippedChecks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DstBottleneckBucket"
+          description: Top 10 audit checks with result=SKIP.
         generatedAt:
           type: string
           format: date-time

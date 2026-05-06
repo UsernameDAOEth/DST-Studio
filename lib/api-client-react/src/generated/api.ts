@@ -26,6 +26,7 @@ import type {
   CreateHermesRunRequest,
   CreateWatchlistEntry,
   DstPipelineHealth,
+  DstShortBottleneck,
   GetAuditByAssetParams,
   GetHermesFindingsParams,
   GetHermesJobsParams,
@@ -3433,6 +3434,83 @@ export function useGetDstPipelineHealth<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDstPipelineHealthQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Aggregations over the last 7 days of SHORT signals: verdict counts, setup-family distribution, top reason codes, top rejection codes, and most-failing/skipped audit checks. Mirrors the `pnpm --filter @workspace/scripts run short-pipeline-invariant:db` report so the dashboard can surface the cause of "SHORT PIPELINE BROKEN" without shelling in. Read-only.
+
+ * @summary SHORT pipeline bottleneck breakdown for the last 7 days
+ */
+export const getGetDstShortBottleneckUrl = () => {
+  return `/api/dst/pipeline-health/short-bottleneck`;
+};
+
+export const getDstShortBottleneck = async (
+  options?: RequestInit,
+): Promise<DstShortBottleneck> => {
+  return customFetch<DstShortBottleneck>(getGetDstShortBottleneckUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDstShortBottleneckQueryKey = () => {
+  return [`/api/dst/pipeline-health/short-bottleneck`] as const;
+};
+
+export const getGetDstShortBottleneckQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDstShortBottleneck>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDstShortBottleneck>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDstShortBottleneckQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDstShortBottleneck>>
+  > = ({ signal }) => getDstShortBottleneck({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDstShortBottleneck>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDstShortBottleneckQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDstShortBottleneck>>
+>;
+export type GetDstShortBottleneckQueryError = ErrorType<unknown>;
+
+/**
+ * @summary SHORT pipeline bottleneck breakdown for the last 7 days
+ */
+
+export function useGetDstShortBottleneck<
+  TData = Awaited<ReturnType<typeof getDstShortBottleneck>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDstShortBottleneck>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDstShortBottleneckQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
