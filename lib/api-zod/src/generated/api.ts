@@ -2826,7 +2826,7 @@ export const GetPythSnapshotBySymbolResponse = zod
   );
 
 /**
- * Returns the current Pyth Lazer connection status and the most recent cached tick per tracked asset (BTC, ETH, SOL). Prices stream via WebSocket at fixed_rate@200ms and are held in memory only — no DB persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.
+ * Returns the current Pyth Lazer connection status and the most recent cached tick per tracked asset (BTC, ETH, SOL). Prices stream via WebSocket at fixed_rate@1000ms (matches the entitlement of the configured API key) and are held in memory only — no DB persistence. status=UNCONFIGURED when PYTH_LAZER_API_KEY is missing.
 
  * @summary Latest in-memory snapshot from the Pyth Lazer real-time WebSocket stream
  */

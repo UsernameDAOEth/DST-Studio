@@ -1,4 +1,4 @@
-import { useGetLazerSnapshot } from "@workspace/api-client-react";
+import { useGetLazerSnapshot, getGetLazerSnapshotQueryKey } from "@workspace/api-client-react";
 import { Radio, RadioTower, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +64,7 @@ function formatConfPct(price: number | null | undefined, conf: number | null | u
 
 export function LazerStreamPanel() {
   const { data, isLoading } = useGetLazerSnapshot({
-    query: { refetchInterval: 1000 },
+    query: { queryKey: getGetLazerSnapshotQueryKey(), refetchInterval: 1000 },
   });
 
   const status = data?.status ?? (isLoading ? "CONNECTING" : "UNCONFIGURED");

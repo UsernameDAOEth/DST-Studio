@@ -61,11 +61,26 @@ class LazerStreamManager {
       this.status = "CONNECTING";
       this.startedAt = Date.now();
       try {
+        const sdkLogger = {
+          trace: () => {},
+          debug: () => {},
+          info: (msg: unknown) => logger.info(`[lazer-sdk] ${String(msg)}`),
+          warn: (msg: unknown) => logger.warn(`[lazer-sdk] ${String(msg)}`),
+          error: (msg: unknown) => logger.error(`[lazer-sdk] ${String(msg)}`),
+        };
         const client = await PythLazerClient.create({
           token,
+          logger: sdkLogger,
           webSocketPoolConfig: {
             urls: [DEFAULT_STREAM_SERVICE_0_URL, DEFAULT_STREAM_SERVICE_1_URL],
             numConnections: 2,
+            onWebSocketPoolError: (err: Error) => {
+              this.lastError = err.message;
+              logger.error({ err }, "Pyth Lazer: pool error");
+            },
+            onWebSocketError: (err: Error) => {
+              logger.warn({ err: err.message }, "Pyth Lazer: socket error");
+            },
           },
         });
         this.client = client;
@@ -89,9 +104,10 @@ class LazerStreamManager {
           subscriptionId: SUBSCRIPTION_ID,
           priceFeedIds: FEEDS.map((f) => f.priceFeedId),
           properties: ["price", "confidence", "exponent"],
-          formats: [],
+          formats: ["evm"],
+          deliveryFormat: "json",
           parsed: true,
-          channel: "fixed_rate@200ms",
+          channel: "fixed_rate@1000ms",
         });
 
         logger.info(
@@ -110,16 +126,29 @@ class LazerStreamManager {
     return this.starting;
   }
 
+  private firstMessageLogged = false;
+
   private onMessage(event: JsonOrBinaryResponse): void {
+    if (!this.firstMessageLogged) {
+      this.firstMessageLogged = true;
+      logger.info({ type: event.type }, "Pyth Lazer: first message received");
+    }
+    let parsed: { timestampUs: string; priceFeeds: Array<{ priceFeedId: number; price?: string; confidence?: number; exponent?: number }> } | undefined;
     if (event.type === "json") {
       const v = event.value;
       if (v.type === "subscriptionError" || v.type === "error") {
         this.lastError = v.error;
         logger.warn({ err: v.error }, "Pyth Lazer: subscription error");
+        return;
       }
-      return;
+      if (v.type === "streamUpdated") {
+        parsed = v.parsed;
+      } else {
+        return;
+      }
+    } else {
+      parsed = event.value.parsed;
     }
-    const parsed = event.value.parsed;
     if (!parsed) return;
     const ts = Number(parsed.timestampUs) / 1000;
     for (const f of parsed.priceFeeds) {
