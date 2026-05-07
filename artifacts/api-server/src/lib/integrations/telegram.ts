@@ -17,7 +17,11 @@ const status: TelegramDeliveryStatus = {
   totalErrors: 0,
 };
 
-const deliveredSignalIds = new Set<number>();
+// Dedup by stable signal identity (asset + packet hash) so re-scans of an
+// unchanged setup don't re-notify even though a new DB row is inserted each scan.
+const deliveredKeys = new Set<string>();
+
+const TELEGRAM_TIMEOUT_MS = 8_000;
 
 export function getTelegramStatus(): TelegramDeliveryStatus {
   return { ...status };
@@ -53,6 +57,11 @@ interface SignalLike {
   invalidationPrice: string | number | null;
   targetZone: string | number | null;
   rejectionCodes: string[] | null;
+  packetHash: string | null;
+}
+
+function dedupKey(signal: SignalLike): string {
+  return `${signal.asset}:${signal.packetHash ?? `id-${signal.id}`}`;
 }
 
 function buildSignalUrl(asset: string): string | null {
@@ -103,25 +112,37 @@ export async function sendTelegramMessage(text: string): Promise<void> {
     throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set");
   }
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "MarkdownV2",
-      disable_web_page_preview: true,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "<no body>");
-    throw new Error(`Telegram API ${res.status}: ${body.slice(0, 200)}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "MarkdownV2",
+        disable_web_page_preview: true,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "<no body>");
+      throw new Error(`Telegram API ${res.status}: ${body.slice(0, 200)}`);
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Telegram API timeout after ${TELEGRAM_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 export type DeliveryOutcome =
   | { delivered: true }
-  | { delivered: false; reason: string };
+  | { delivered: false; reason: string; alreadyDelivered?: boolean };
 
 export async function maybeDeliverApprovedSignal(signal: SignalLike): Promise<DeliveryOutcome> {
   if (signal.verdictDjzs !== "PASS" || signal.direction === "WAIT") {
@@ -133,22 +154,23 @@ export async function maybeDeliverApprovedSignal(signal: SignalLike): Promise<De
   if (!isTelegramConfigured()) {
     return { delivered: false, reason: "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not configured" };
   }
-  if (deliveredSignalIds.has(signal.id)) {
-    return { delivered: false, reason: `Signal ${signal.id} already delivered` };
+  const key = dedupKey(signal);
+  if (deliveredKeys.has(key)) {
+    return { delivered: false, reason: `Already delivered (${key})`, alreadyDelivered: true };
   }
-  deliveredSignalIds.add(signal.id);
+  deliveredKeys.add(key);
   try {
     await sendTelegramMessage(formatSignalMessage(signal));
     status.lastSuccessAt = new Date().toISOString();
     status.totalDeliveries++;
-    logger.info({ signalId: signal.id, asset: signal.asset }, "Telegram signal delivered");
+    logger.info({ signalId: signal.id, asset: signal.asset, key }, "Telegram signal delivered");
     return { delivered: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     status.lastErrorAt = new Date().toISOString();
     status.lastError = msg;
     status.totalErrors++;
-    deliveredSignalIds.delete(signal.id);
+    deliveredKeys.delete(key);
     logger.error({ err, signalId: signal.id, asset: signal.asset }, "Telegram delivery failed");
     return { delivered: false, reason: msg };
   }

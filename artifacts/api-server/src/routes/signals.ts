@@ -4,8 +4,6 @@ import { signalsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import { computeSignal } from "../lib/dst/signalEngine";
 import { persistSignal } from "../lib/dst/persistSignal";
-import { maybeDeliverApprovedSignal } from "../lib/integrations/telegram";
-import { logger } from "../lib/logger";
 import {
   GetSignalsQueryParams,
   GetSignalByAssetParams,
@@ -30,12 +28,10 @@ async function getOrComputeSignal(asset: string) {
   }
 
   const signal = await computeSignal(asset);
-  const inserted = await persistSignal(signal);
-  // Best-effort delivery — non-blocking for the HTTP request path
-  void maybeDeliverApprovedSignal(inserted).catch((err) => {
-    logger.error({ err, signalId: inserted.id }, "Unhandled error in maybeDeliverApprovedSignal");
-  });
-  return inserted;
+  // Delivery is intentionally NOT triggered here — routing is owned by the
+  // Hermes scan loop (see hermes/scan.ts ROUTING phase) so HTTP read paths
+  // never produce side-effect alerts.
+  return await persistSignal(signal);
 }
 
 function mapSignalRow(row: typeof signalsTable.$inferSelect) {

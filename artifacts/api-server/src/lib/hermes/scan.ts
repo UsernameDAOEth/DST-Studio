@@ -120,7 +120,7 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
         if (outcome.delivered) {
           pRouting.status = "COMPLETE";
           pRouting.result = `Telegram delivered (signal ${persistedSignal!.id})`;
-        } else if (outcome.reason.startsWith("Signal ") && outcome.reason.includes("already delivered")) {
+        } else if (!outcome.delivered && outcome.alreadyDelivered) {
           pRouting.status = "SKIPPED";
           pRouting.skippedReason = outcome.reason;
         } else {

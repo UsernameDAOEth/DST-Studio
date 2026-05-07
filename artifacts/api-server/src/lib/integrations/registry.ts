@@ -1,5 +1,7 @@
 import { IntegrationStatus } from "@workspace/api-zod";
 import { isTelegramConfigured, getTelegramStatus } from "./telegram";
+import { getConstraints, updateConstraints } from "../hermes/constraints";
+import type { HermesAlertRouting } from "../hermes/types";
 
 export const INTEGRATIONS = [
   {
@@ -88,20 +90,37 @@ export const INTEGRATIONS = [
   },
 ];
 
-// In-memory toggle store
+// In-memory toggle store for non-routing integrations. Routing channels
+// (telegram/xmtp/discord) are sourced from Hermes constraints so the toggle
+// and the scan loop share a single source of truth.
 const enabledStore: Record<string, boolean> = {};
+
+const ROUTING_INTEGRATIONS = new Set(["telegram", "xmtp", "discord"]);
+
+function readEnabled(name: string): boolean {
+  if (name === "telegram") return getConstraints().alertRouting.telegram;
+  if (name === "xmtp") return getConstraints().alertRouting.xmtp;
+  if (name === "discord") return getConstraints().alertRouting.discord;
+  return enabledStore[name] ?? false;
+}
+
+async function writeEnabled(name: string, next: boolean): Promise<void> {
+  if (ROUTING_INTEGRATIONS.has(name)) {
+    const current = getConstraints().alertRouting;
+    const routing: HermesAlertRouting = { ...current, [name]: next };
+    await updateConstraints({ alertRouting: routing });
+    return;
+  }
+  enabledStore[name] = next;
+}
 
 function decorate(integration: typeof INTEGRATIONS[number]) {
   let configured = integration.configured;
-  let enabled = enabledStore[integration.name] ?? false;
+  const enabled = readEnabled(integration.name);
   let deliveryStatus: ReturnType<typeof getTelegramStatus> | undefined;
 
   if (integration.name === "telegram") {
     configured = isTelegramConfigured();
-    // Auto-enable telegram when fully configured so toggle reflects reality
-    if (configured && enabledStore[integration.name] === undefined) {
-      enabled = true;
-    }
     deliveryStatus = getTelegramStatus();
   }
 
@@ -122,9 +141,9 @@ export function getIntegrations() {
   return INTEGRATIONS.map(decorate);
 }
 
-export function toggleIntegration(name: string) {
+export async function toggleIntegration(name: string) {
   const integration = INTEGRATIONS.find((i) => i.name === name);
   if (!integration) return null;
-  enabledStore[name] = !(enabledStore[name] ?? false);
+  await writeEnabled(name, !readEnabled(name));
   return decorate(integration);
 }

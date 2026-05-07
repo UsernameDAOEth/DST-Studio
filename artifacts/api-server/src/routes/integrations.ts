@@ -13,8 +13,8 @@ router.get("/:name", (req, res) => {
   res.json(found);
 });
 
-router.post("/:name/toggle", (req, res) => {
-  const result = toggleIntegration(req.params.name);
+router.post("/:name/toggle", async (req, res) => {
+  const result = await toggleIntegration(req.params.name);
   if (!result) { res.status(404).json({ error: "Integration not found" }); return; }
   res.json(result);
 });
