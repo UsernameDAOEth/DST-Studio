@@ -46,8 +46,23 @@ function computeWeightedVerdict(checks: AuditCheck[]): {
 const args = process.argv.slice(2);
 const dbMode = args.includes("--db");
 
+function parseTimeframeArg(): "4H" | "15m" | "ALL" {
+  const tfArg = args.find((a) => a.startsWith("--timeframe="));
+  if (!tfArg) return "ALL";
+  const v = tfArg.split("=")[1];
+  if (v === "4H" || v === "15m") return v;
+  if (v === "all" || v === "ALL") return "ALL";
+  console.error(`Unknown --timeframe value: ${v}. Use 4H | 15m | all.`);
+  process.exit(2);
+}
+
 if (dbMode) {
-  await runDbReport();
+  const tfSel = parseTimeframeArg();
+  const targets: Array<"4H" | "15m"> = tfSel === "ALL" ? ["4H", "15m"] : [tfSel];
+  for (const tf of targets) {
+    if (targets.length > 1) console.log(`\n══ TIMEFRAME ${tf} ══`);
+    await runDbReport(tf);
+  }
   process.exit(0);
 }
 
@@ -160,7 +175,7 @@ console.log(`  INV4 CROWDING_TOO_HIGH cases: ${crowdingCases.length} passed`);
 
 export {};
 
-async function runDbReport(): Promise<void> {
+async function runDbReport(timeframe: "4H" | "15m"): Promise<void> {
   const { db, signalsTable } = await import("@workspace/db");
   const { gte, eq, and, desc } = await import("drizzle-orm");
 
@@ -171,6 +186,7 @@ async function runDbReport(): Promise<void> {
     .select({
       id: signalsTable.id,
       asset: signalsTable.asset,
+      timeframe: signalsTable.timeframe,
       computedAt: signalsTable.computedAt,
       direction: signalsTable.direction,
       processVerdict: signalsTable.processVerdict,
@@ -182,10 +198,16 @@ async function runDbReport(): Promise<void> {
       rrRatio: signalsTable.rrRatio,
     })
     .from(signalsTable)
-    .where(and(eq(signalsTable.direction, "SHORT"), gte(signalsTable.computedAt, since)))
+    .where(
+      and(
+        eq(signalsTable.direction, "SHORT"),
+        eq(signalsTable.timeframe, timeframe),
+        gte(signalsTable.computedAt, since),
+      ),
+    )
     .orderBy(desc(signalsTable.computedAt));
 
-  console.log(`SHORT pipeline DB report — last ${WINDOW_DAYS} days`);
+  console.log(`SHORT pipeline DB report [tf=${timeframe}] — last ${WINDOW_DAYS} days`);
   console.log(`  total SHORTs: ${rows.length}`);
   if (rows.length === 0) {
     console.log("  no SHORTs emitted in window — engine is not producing SHORT setups");
