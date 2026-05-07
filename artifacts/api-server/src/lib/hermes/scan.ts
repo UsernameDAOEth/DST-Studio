@@ -129,25 +129,29 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
       type ChannelReport = { channel: string; status: "COMPLETE" | "SKIPPED" | "FAILED"; detail: string };
       const reports: ChannelReport[] = [];
 
+      const tfTag = `[${persistedSignal!.timeframe ?? "4H"}]`;
+      const tgChan = `Telegram${tfTag}`;
+      const emailChan = `Email${tfTag}`;
+
       if (constraints.alertRouting.telegram) {
         if (!isTelegramConfigured()) {
-          reports.push({ channel: "Telegram", status: "SKIPPED", detail: "TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID missing" });
+          reports.push({ channel: tgChan, status: "SKIPPED", detail: "TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID missing" });
         } else {
           const out = await maybeDeliverApprovedSignal(persistedSignal!);
-          if (out.delivered) reports.push({ channel: "Telegram", status: "COMPLETE", detail: "delivered" });
-          else if (out.alreadyDelivered) reports.push({ channel: "Telegram", status: "SKIPPED", detail: out.reason });
-          else reports.push({ channel: "Telegram", status: "FAILED", detail: out.reason });
+          if (out.delivered) reports.push({ channel: tgChan, status: "COMPLETE", detail: "delivered" });
+          else if (out.alreadyDelivered) reports.push({ channel: tgChan, status: "SKIPPED", detail: out.reason });
+          else reports.push({ channel: tgChan, status: "FAILED", detail: out.reason });
         }
       }
 
       if (constraints.alertRouting.email) {
         if (!isAgentMailConfigured()) {
-          reports.push({ channel: "Email", status: "SKIPPED", detail: "AGENTMAIL_API_KEY/AGENTMAIL_TO missing" });
+          reports.push({ channel: emailChan, status: "SKIPPED", detail: "AGENTMAIL_API_KEY/AGENTMAIL_TO missing" });
         } else {
           const out = await maybeDeliverApprovedSignalEmail(persistedSignal!);
-          if (out.delivered) reports.push({ channel: "Email", status: "COMPLETE", detail: "delivered" });
-          else if (out.alreadyDelivered) reports.push({ channel: "Email", status: "SKIPPED", detail: out.reason });
-          else reports.push({ channel: "Email", status: "FAILED", detail: out.reason });
+          if (out.delivered) reports.push({ channel: emailChan, status: "COMPLETE", detail: "delivered" });
+          else if (out.alreadyDelivered) reports.push({ channel: emailChan, status: "SKIPPED", detail: out.reason });
+          else reports.push({ channel: emailChan, status: "FAILED", detail: out.reason });
         }
       }
 

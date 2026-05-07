@@ -95,12 +95,13 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function buildSignalUrl(asset: string): string | null {
+function buildSignalUrl(asset: string, timeframe: string | null | undefined): string | null {
   const domains = (process.env.REPLIT_DOMAINS ?? "").split(",").map(s => s.trim()).filter(Boolean);
   const dev = process.env.REPLIT_DEV_DOMAIN;
   const host = domains[0] ?? dev;
   if (!host) return null;
-  return `https://${host}/signal/${encodeURIComponent(asset.toLowerCase())}`;
+  const tf = timeframe ?? "4H";
+  return `https://${host}/signal/${encodeURIComponent(asset.toLowerCase())}?timeframe=${encodeURIComponent(tf)}`;
 }
 
 export interface FormattedEmail {
@@ -116,7 +117,7 @@ export function formatSignalEmail(signal: SignalLike): FormattedEmail {
   const entryHigh = signal.entryZoneHigh !== null ? Number(signal.entryZoneHigh) : null;
   const inv = signal.invalidationPrice !== null ? Number(signal.invalidationPrice) : null;
   const tgt = signal.targetZone !== null ? Number(signal.targetZone) : null;
-  const url = buildSignalUrl(signal.asset);
+  const url = buildSignalUrl(signal.asset, signal.timeframe);
   const codes = signal.rejectionCodes ?? [];
   const entryStr = entryLow !== null && entryHigh !== null
     ? `${formatNumber(entryLow)} – ${formatNumber(entryHigh)}`
