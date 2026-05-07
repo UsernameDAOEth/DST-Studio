@@ -10,7 +10,17 @@ import {
   PRICE_STALE_THRESHOLD_MS,
   type HistoricalPrice,
 } from "./defillamaClient";
-import { getHistorical15mWithProvenance } from "../pyth/benchmarksClient";
+import { getHistorical15mWithProvenance, MIN_HISTORY_BARS_15M } from "../pyth/benchmarksClient";
+
+function minHistoryBarsFor(timeframe: string): number {
+  return timeframe === "15m" ? MIN_HISTORY_BARS_15M : MIN_HISTORY_BARS;
+}
+
+function lateEntryMultiplierFor(timeframe: string, base: number): number {
+  // 15m bars move faster relative to ATR — tighten late-entry detection
+  // so an entry already 1×ATR beyond ema9 trips ENTRY_TOO_LATE.
+  return timeframe === "15m" ? Math.min(1.0, base) : base;
+}
 import { lastEma, rsi, macd, atr } from "./indicators";
 import { normalizeInputs, hashPacket } from "./normalization";
 import { runFastPathVerification, type VerificationReport } from "./verification";
@@ -787,7 +797,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
       : currentPrice;
 
   const setupFamily = classifySetupFamily(regime, direction, counterTrendShort);
-  const entryQuality = assessEntryQuality(currentPrice, ema9Val, atrVal, direction, constraints.lateEntryAtrMultiplier);
+  const entryQuality = assessEntryQuality(currentPrice, ema9Val, atrVal, direction, lateEntryMultiplierFor(timeframe, constraints.lateEntryAtrMultiplier));
   const narrativeRisk = assessNarrativeRisk(regime, reasonCodes, oiContext, direction);
   const rrRatio = computeRR(entryZoneHigh, entryZoneLow, targetZone, invalidationPrice, direction);
 
@@ -966,7 +976,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     direction,
     minRRThreshold: constraints.minRRThreshold,
     entryQuality,
-    minHistoryBars: MIN_HISTORY_BARS,
+    minHistoryBars: minHistoryBarsFor(timeframe),
     pythVerdict: pythVerifier.verdict as "CONFIRMS" | "DIVERGES" | "UNAVAILABLE" | "SKIPPED",
   });
 
@@ -1033,7 +1043,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   const forcedWaitReason = isCritical
     ? `Data quality is CRITICAL: ${dedupedFlags.filter(f => ["MISSING_PRICE", "DATA_UNAVAILABLE"].includes(f)).join(", ")}.`
     : qualityFlags.includes("INSUFFICIENT_HISTORY")
-    ? `Only ${hist.length} bars available — minimum is ${MIN_HISTORY_BARS}.`
+    ? `Only ${hist.length} bars available — minimum is ${minHistoryBarsFor(timeframe)}.`
     : null;
 
   const dataQuality: DataQualityReport = {
@@ -1051,7 +1061,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
     tvlProvenance: tvlData?.provenance ?? null,
     pythVerifier,
     historicalBarCount: hist.length,
-    minHistoricalBarsRequired: MIN_HISTORY_BARS,
+    minHistoricalBarsRequired: minHistoryBarsFor(timeframe),
     dataReadyForSignal: !isCritical && !qualityFlags.includes("INSUFFICIENT_HISTORY"),
     degradedConfidence: grade === "DEGRADED" || grade === "POOR",
     forcedWaitReason,

@@ -249,6 +249,14 @@ export default function Stack() {
           />
           <StackLayer
             phase="PHASE 3"
+            name="Pyth Benchmarks — 15m OHLC"
+            role="Historical 15-minute bar source for the additive 15m timeframe pipeline"
+            tool="PYTH BENCHMARKS TRADINGVIEW SHIM · FREE · NO KEY"
+            status="LIVE"
+            note="Backs the 15m signal pipeline alongside the byte-identical 4H DefiLlama pipeline. 200 bars per fetch, 45-second per-asset cache with in-flight coalescing, 30-min staleness threshold, 96-bar (24h) sufficiency floor. On failure raises PYTH_BENCHMARKS_UNAVAILABLE and the 15m signal degrades to WAIT — the 4H pipeline is unaffected. Distinct from the Hermes REST verifier above (which checks live price confidence, not historical bars)."
+          />
+          <StackLayer
+            phase="PHASE 3"
             name="Pyth Lazer Stream"
             role="Sub-second real-time price ticker on the dashboard — passive, additive, never feeds the audit"
             tool="PYTH LAZER WEBSOCKET SDK · REQUIRES PYTH_LAZER_API_KEY"

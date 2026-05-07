@@ -20,7 +20,7 @@ import type {
   HistoricalPrice,
   NormalizedHistoryResult,
 } from "../dst/defillamaClient";
-import { ASSET_MAP, MIN_HISTORY_BARS } from "../dst/defillamaClient";
+import { ASSET_MAP } from "../dst/defillamaClient";
 
 const BENCHMARKS_BASE = "https://benchmarks.pyth.network";
 const RESOLUTION_15M = "15";
@@ -29,6 +29,17 @@ const RESOLUTION_15M_MS = 15 * 60 * 1000;
 const HIST_BARS = 200;
 // 15m bars rotate every 15min; treat anything older than 30min as stale.
 export const HISTORY_15M_STALE_THRESHOLD_MS = 30 * 60 * 1000;
+// 15m sufficiency floor: 96 bars = 24h. EMA50 needs 50, but the 15m engine
+// also wants enough lookback to assess prev24Price (96 bars).
+export const MIN_HISTORY_BARS_15M = 96;
+// Bars rotate every 15min — a ~45s in-process cache absorbs the per-scan
+// fan-out (every Hermes scan triggers 3 assets × N callers) without ever
+// returning a stale-by-bar result.
+const CACHE_TTL_MS = 45_000;
+
+type CacheEntry = { result: NormalizedHistoryResult; expiresAt: number };
+const resultCache = new Map<string, CacheEntry>();
+const inFlight = new Map<string, Promise<NormalizedHistoryResult>>();
 
 const ASSET_TO_BENCHMARK_SYMBOL: Record<string, string> = {
   BTC: "Crypto.BTC/USD",
@@ -82,9 +93,7 @@ function emptyResult(asset: string, fetchedAt: Date): NormalizedHistoryResult {
   };
 }
 
-export async function getHistorical15mWithProvenance(
-  asset: string,
-): Promise<NormalizedHistoryResult> {
+async function fetchOnce(asset: string): Promise<NormalizedHistoryResult> {
   const fetchedAt = new Date();
   const symbol = ASSET_TO_BENCHMARK_SYMBOL[asset];
   if (!symbol || !ASSET_MAP[asset]) {
@@ -130,7 +139,7 @@ export async function getHistorical15mWithProvenance(
         false,
       ),
       missing: prices.length === 0,
-      insufficient: prices.length < MIN_HISTORY_BARS,
+      insufficient: prices.length < MIN_HISTORY_BARS_15M,
     };
   } catch (err) {
     logger.warn({ err, asset }, "getHistorical15mWithProvenance: failed, returning empty");
@@ -138,6 +147,32 @@ export async function getHistorical15mWithProvenance(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function getHistorical15mWithProvenance(
+  asset: string,
+): Promise<NormalizedHistoryResult> {
+  const now = Date.now();
+  const cached = resultCache.get(asset);
+  if (cached && cached.expiresAt > now && !cached.result.missing) {
+    return cached.result;
+  }
+  const existing = inFlight.get(asset);
+  if (existing) return existing;
+
+  const promise = fetchOnce(asset)
+    .then((result) => {
+      // Only cache successful fetches so transient failures retry on next call.
+      if (!result.missing) {
+        resultCache.set(asset, { result, expiresAt: Date.now() + CACHE_TTL_MS });
+      }
+      return result;
+    })
+    .finally(() => {
+      inFlight.delete(asset);
+    });
+  inFlight.set(asset, promise);
+  return promise;
 }
 
 export const RESOLUTION_15M_BAR_MS = RESOLUTION_15M_MS;
