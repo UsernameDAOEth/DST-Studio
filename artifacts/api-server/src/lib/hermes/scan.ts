@@ -33,14 +33,26 @@ export function getScanStatus(): HermesScanStatus {
 // shim. Each (asset, timeframe) pair runs the full DJZS audit independently
 // and persists as a separate row in `signals`.
 const SCAN_TIMEFRAMES = ["4H", "15m"] as const;
+type ScanTimeframe = (typeof SCAN_TIMEFRAMES)[number];
 
-export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
+export interface TriggerScanOptions {
+  timeframes?: readonly ScanTimeframe[];
+}
+
+export async function triggerScan(
+  assets: string[],
+  options: TriggerScanOptions = {},
+): Promise<HermesScanResult> {
   const constraints = getConstraints();
   lastRunAt = new Date().toISOString();
 
+  const timeframes = options.timeframes && options.timeframes.length > 0
+    ? options.timeframes
+    : SCAN_TIMEFRAMES;
+
   const pairs: { asset: string; timeframe: string }[] = [];
   for (const asset of assets) {
-    for (const tf of SCAN_TIMEFRAMES) pairs.push({ asset, timeframe: tf });
+    for (const tf of timeframes) pairs.push({ asset, timeframe: tf });
   }
 
   const jobs: HermesJob[] = pairs.map(({ asset, timeframe }) => ({
@@ -194,7 +206,7 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
     triggeredAt: lastRunAt,
     assets,
     jobIds: jobs.map(j => j.id),
-    message: `Triggered scan for ${assets.length} asset${assets.length !== 1 ? "s" : ""} × ${SCAN_TIMEFRAMES.length} timeframes`,
+    message: `Triggered scan for ${assets.length} asset${assets.length !== 1 ? "s" : ""} × ${timeframes.length} timeframe${timeframes.length !== 1 ? "s" : ""} (${timeframes.join(", ")})`,
   };
 }
 

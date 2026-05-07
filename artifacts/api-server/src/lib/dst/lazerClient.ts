@@ -29,6 +29,21 @@ interface FeedConfig {
   priceFeedId: number;
 }
 
+export interface SignificantMoveEvent {
+  asset: string;
+  fromPrice: number;
+  toPrice: number;
+  changeBps: number;
+  detectedAt: number;
+}
+
+export type SignificantMoveListener = (ev: SignificantMoveEvent) => void;
+
+interface MoveBaseline {
+  price: number;
+  setAt: number;
+}
+
 const FEEDS: FeedConfig[] = [
   { asset: "BTC", priceFeedId: 1 },
   { asset: "ETH", priceFeedId: 2 },
@@ -39,6 +54,13 @@ const FEED_BY_ID = new Map<number, FeedConfig>(FEEDS.map((f) => [f.priceFeedId, 
 
 const SUBSCRIPTION_ID = 1;
 
+function readEnvNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 class LazerStreamManager {
   private status: LazerStatus = "UNCONFIGURED";
   private client: PythLazerClient | null = null;
@@ -47,6 +69,53 @@ class LazerStreamManager {
   private lastConnectedAt: number | null = null;
   private startedAt: number | null = null;
   private starting: Promise<void> | null = null;
+  private moveListeners = new Set<SignificantMoveListener>();
+  private moveBaselines = new Map<string, MoveBaseline>();
+  private lastMoveFiredAt = new Map<string, number>();
+  private moveThresholdBps = readEnvNumber("LAZER_MOVE_TRIGGER_BPS", 50);
+  private moveDebounceMs = readEnvNumber("LAZER_MOVE_DEBOUNCE_MS", 60_000);
+  private moveBaselineMaxAgeMs = readEnvNumber("LAZER_MOVE_BASELINE_MAX_AGE_MS", 15 * 60_000);
+
+  onSignificantMove(listener: SignificantMoveListener): () => void {
+    this.moveListeners.add(listener);
+    return () => this.moveListeners.delete(listener);
+  }
+
+  private maybeEmitMove(asset: string, price: number, now: number): void {
+    if (!Number.isFinite(price) || price <= 0) return;
+    const baseline = this.moveBaselines.get(asset);
+    if (!baseline || now - baseline.setAt > this.moveBaselineMaxAgeMs) {
+      this.moveBaselines.set(asset, { price, setAt: now });
+      return;
+    }
+    const changeBps = ((price - baseline.price) / baseline.price) * 10_000;
+    if (Math.abs(changeBps) < this.moveThresholdBps) return;
+
+    const lastFired = this.lastMoveFiredAt.get(asset) ?? 0;
+    if (now - lastFired < this.moveDebounceMs) {
+      // Still update the baseline so we measure the next move from here, but
+      // don't fire — we're in the cool-down window.
+      this.moveBaselines.set(asset, { price, setAt: now });
+      return;
+    }
+
+    const ev: SignificantMoveEvent = {
+      asset,
+      fromPrice: baseline.price,
+      toPrice: price,
+      changeBps,
+      detectedAt: now,
+    };
+    this.lastMoveFiredAt.set(asset, now);
+    this.moveBaselines.set(asset, { price, setAt: now });
+    for (const listener of this.moveListeners) {
+      try {
+        listener(ev);
+      } catch (err) {
+        logger.error({ err, asset }, "Pyth Lazer: significant-move listener error");
+      }
+    }
+  }
 
   async start(): Promise<void> {
     const token = process.env.PYTH_LAZER_API_KEY;
@@ -170,6 +239,7 @@ class LazerStreamManager {
         ageMs: now - ts,
         receivedAt: now,
       });
+      if (price != null) this.maybeEmitMove(cfg.asset, price, now);
     }
   }
 
