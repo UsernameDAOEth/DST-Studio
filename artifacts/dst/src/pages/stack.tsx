@@ -391,7 +391,7 @@ export default function Stack() {
               </div>
               {[
                 { name: "BROWSER RESEARCH", note: "Triggered narrative check via Browserbase — APPROVED_ONLY policy" },
-                { name: "TELEGRAM ROUTING", note: "ACTIVE — delivers APPROVED signals via TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, dedup'd per signalId" },
+                { name: "TELEGRAM ROUTING", note: "ACTIVE — delivers APPROVED signals via TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, dedup'd per asset+packetHash" },
                 { name: "XMTP ROUTING", note: "Wallet-to-wallet delivery — requires XMTP_PRIVATE_KEY" },
                 { name: "DISCORD ROUTING", note: "Channel delivery — requires DISCORD_WEBHOOK_URL" },
                 { name: "CODEBASE INSPECTION", note: "MCP extension — read DST/DJZS rules for constraint diagnostics" },
