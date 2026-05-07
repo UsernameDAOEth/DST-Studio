@@ -1,5 +1,6 @@
 import { IntegrationStatus } from "@workspace/api-zod";
 import { isTelegramConfigured, getTelegramStatus } from "./telegram";
+import { isAgentMailConfigured, getAgentMailStatus } from "./agentmail";
 import { getConstraints, updateConstraints } from "../hermes/constraints";
 import type { HermesAlertRouting } from "../hermes/types";
 
@@ -77,6 +78,18 @@ export const INTEGRATIONS = [
     phase: "Phase 3",
   },
   {
+    name: "agentmail",
+    displayName: "AgentMail Email Alerts",
+    description: "Email delivery for APPROVED signal notifications via AgentMail (inbox-as-an-API for AI agents). Sends a formatted signal report to the configured recipient address from the agent inbox.",
+    category: "ALERTS",
+    enabled: false,
+    configured: false,
+    status: "NOT_CONFIGURED",
+    envKeyRequired: "AGENTMAIL_API_KEY",
+    docsUrl: "https://docs.agentmail.to/welcome",
+    phase: "Phase 3",
+  },
+  {
     name: "mpp",
     displayName: "MPP Enrichment",
     description: "Paid market positioning and participant data enrichment layer. Adds institutional flow, options flow, and dark pool signals to high-confidence setups.",
@@ -91,23 +104,29 @@ export const INTEGRATIONS = [
 ];
 
 // In-memory toggle store for non-routing integrations. Routing channels
-// (telegram/xmtp/discord) are sourced from Hermes constraints so the toggle
-// and the scan loop share a single source of truth.
+// (telegram/xmtp/discord/email) are sourced from Hermes constraints so the
+// toggle and the scan loop share a single source of truth.
 const enabledStore: Record<string, boolean> = {};
 
-const ROUTING_INTEGRATIONS = new Set(["telegram", "xmtp", "discord"]);
+// Map integration name -> alertRouting key (often the same).
+const ROUTING_KEY: Record<string, keyof HermesAlertRouting> = {
+  telegram: "telegram",
+  xmtp: "xmtp",
+  discord: "discord",
+  agentmail: "email",
+};
 
 function readEnabled(name: string): boolean {
-  if (name === "telegram") return getConstraints().alertRouting.telegram;
-  if (name === "xmtp") return getConstraints().alertRouting.xmtp;
-  if (name === "discord") return getConstraints().alertRouting.discord;
+  const key = ROUTING_KEY[name];
+  if (key) return getConstraints().alertRouting[key];
   return enabledStore[name] ?? false;
 }
 
 async function writeEnabled(name: string, next: boolean): Promise<void> {
-  if (ROUTING_INTEGRATIONS.has(name)) {
+  const key = ROUTING_KEY[name];
+  if (key) {
     const current = getConstraints().alertRouting;
-    const routing: HermesAlertRouting = { ...current, [name]: next };
+    const routing: HermesAlertRouting = { ...current, [key]: next };
     await updateConstraints({ alertRouting: routing });
     return;
   }
@@ -122,6 +141,9 @@ function decorate(integration: typeof INTEGRATIONS[number]) {
   if (integration.name === "telegram") {
     configured = isTelegramConfigured();
     deliveryStatus = getTelegramStatus();
+  } else if (integration.name === "agentmail") {
+    configured = isAgentMailConfigured();
+    deliveryStatus = getAgentMailStatus();
   }
 
   return {

@@ -2,6 +2,7 @@ export interface HermesAlertRouting {
   telegram: boolean;
   xmtp: boolean;
   discord: boolean;
+  email: boolean;
 }
 
 export interface HermesConstraints {

@@ -272,7 +272,7 @@ export default function Integrations() {
                   </div>
                 )}
 
-                {integration.name === "telegram" && integration.deliveryStatus && (
+                {(integration.name === "telegram" || integration.name === "agentmail") && integration.deliveryStatus && (
                   <div className="p-3 bg-secondary/50 border border-border rounded-none space-y-1.5">
                     <div className="text-[10px] font-mono text-muted-foreground uppercase">Delivery Telemetry</div>
                     <div className="flex justify-between text-[10px] font-mono">
@@ -298,9 +298,14 @@ export default function Integrations() {
                         ERR: {integration.deliveryStatus.lastError}
                       </div>
                     )}
-                    {!integration.configured && (
+                    {!integration.configured && integration.name === "telegram" && (
                       <div className="text-[10px] font-mono text-[hsl(var(--trade-wait))]">
                         Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to activate.
+                      </div>
+                    )}
+                    {!integration.configured && integration.name === "agentmail" && (
+                      <div className="text-[10px] font-mono text-[hsl(var(--trade-wait))]">
+                        Set AGENTMAIL_API_KEY, AGENTMAIL_INBOX_ID, AGENTMAIL_TO to activate.
                       </div>
                     )}
                   </div>

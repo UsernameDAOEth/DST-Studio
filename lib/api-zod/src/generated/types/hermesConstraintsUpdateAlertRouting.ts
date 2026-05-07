@@ -10,4 +10,5 @@ export type HermesConstraintsUpdateAlertRouting = {
   telegram?: boolean;
   xmtp?: boolean;
   discord?: boolean;
+  email?: boolean;
 };

@@ -76,6 +76,7 @@ The project is a pnpm workspace monorepo built with Node.js 24 and TypeScript 5.
     - XMTP (wallet-to-wallet delivery)
     - Telegram (bot delivery)
     - Discord (webhook embeds)
+    - AgentMail (email delivery; requires `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID`, `AGENTMAIL_TO`; routes APPROVED signals dedup'd by asset+packetHash)
 - **Research/Enrichment (Scaffolded Integrations - configurable via env vars and UI toggle)**:
     - Browserbase (triggered web research)
     - MPP (institutional flow enrichment)

@@ -1673,7 +1673,10 @@ components:
               type: boolean
             discord:
               type: boolean
-          required: [telegram, xmtp, discord]
+            email:
+              type: boolean
+              description: AgentMail email delivery channel for APPROVED signals
+          required: [telegram, xmtp, discord, email]
         waitBiasPolicy:
           type: string
           enum: [STRICT, STANDARD, RELAXED]
@@ -1728,6 +1731,8 @@ components:
             xmtp:
               type: boolean
             discord:
+              type: boolean
+            email:
               type: boolean
         waitBiasPolicy:
           type: string

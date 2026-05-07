@@ -1386,6 +1386,9 @@ export const GetHermesConstraintsResponse = zod
       telegram: zod.boolean(),
       xmtp: zod.boolean(),
       discord: zod.boolean(),
+      email: zod
+        .boolean()
+        .describe("AgentMail email delivery channel for APPROVED signals"),
     }),
     waitBiasPolicy: zod
       .enum(["STRICT", "STANDARD", "RELAXED"])
@@ -1418,6 +1421,7 @@ export const UpdateHermesConstraintsBody = zod
         telegram: zod.boolean().optional(),
         xmtp: zod.boolean().optional(),
         discord: zod.boolean().optional(),
+        email: zod.boolean().optional(),
       })
       .optional(),
     waitBiasPolicy: zod.enum(["STRICT", "STANDARD", "RELAXED"]).optional(),
@@ -1464,6 +1468,9 @@ export const UpdateHermesConstraintsResponse = zod
       telegram: zod.boolean(),
       xmtp: zod.boolean(),
       discord: zod.boolean(),
+      email: zod
+        .boolean()
+        .describe("AgentMail email delivery channel for APPROVED signals"),
     }),
     waitBiasPolicy: zod
       .enum(["STRICT", "STANDARD", "RELAXED"])

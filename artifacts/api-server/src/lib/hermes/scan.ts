@@ -4,6 +4,7 @@ import { persistSignal } from "../dst/persistSignal";
 import { getConstraints } from "./constraints";
 import { logger } from "../logger";
 import { isTelegramConfigured, maybeDeliverApprovedSignal } from "../integrations/telegram";
+import { isAgentMailConfigured, maybeDeliverApprovedSignalEmail } from "../integrations/agentmail";
 
 let recentJobs: HermesJob[] = [];
 let totalScansToday = 0;
@@ -106,33 +107,56 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
     const routingStart = Date.now();
     const hasRouting = Object.values(constraints.alertRouting).some(v => v);
     const isApproved = persistedSignal && persistedSignal.verdictDjzs === "PASS" && persistedSignal.direction !== "WAIT";
+
     if (!isApproved) {
       pRouting.status = "SKIPPED";
       pRouting.skippedReason = hasRouting
         ? "No APPROVED tradeable signal to route"
         : "No alert routing configured";
-    } else if (constraints.alertRouting.telegram) {
-      if (!isTelegramConfigured()) {
-        pRouting.status = "SKIPPED";
-        pRouting.skippedReason = "Telegram routing enabled but TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID missing";
-      } else {
-        const outcome = await maybeDeliverApprovedSignal(persistedSignal!);
-        if (outcome.delivered) {
-          pRouting.status = "COMPLETE";
-          pRouting.result = `Telegram delivered (signal ${persistedSignal!.id})`;
-        } else if (!outcome.delivered && outcome.alreadyDelivered) {
-          pRouting.status = "SKIPPED";
-          pRouting.skippedReason = outcome.reason;
+    } else {
+      type ChannelReport = { channel: string; status: "COMPLETE" | "SKIPPED" | "FAILED"; detail: string };
+      const reports: ChannelReport[] = [];
+
+      if (constraints.alertRouting.telegram) {
+        if (!isTelegramConfigured()) {
+          reports.push({ channel: "Telegram", status: "SKIPPED", detail: "TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID missing" });
         } else {
-          pRouting.status = "FAILED";
-          pRouting.result = `Telegram delivery failed: ${outcome.reason}`;
+          const out = await maybeDeliverApprovedSignal(persistedSignal!);
+          if (out.delivered) reports.push({ channel: "Telegram", status: "COMPLETE", detail: "delivered" });
+          else if (out.alreadyDelivered) reports.push({ channel: "Telegram", status: "SKIPPED", detail: out.reason });
+          else reports.push({ channel: "Telegram", status: "FAILED", detail: out.reason });
         }
       }
-    } else {
-      pRouting.status = "SKIPPED";
-      pRouting.skippedReason = hasRouting
-        ? "No live channels enabled (XMTP/Discord scaffolded only)"
-        : "No alert routing configured";
+
+      if (constraints.alertRouting.email) {
+        if (!isAgentMailConfigured()) {
+          reports.push({ channel: "Email", status: "SKIPPED", detail: "AGENTMAIL_API_KEY/AGENTMAIL_INBOX_ID/AGENTMAIL_TO missing" });
+        } else {
+          const out = await maybeDeliverApprovedSignalEmail(persistedSignal!);
+          if (out.delivered) reports.push({ channel: "Email", status: "COMPLETE", detail: "delivered" });
+          else if (out.alreadyDelivered) reports.push({ channel: "Email", status: "SKIPPED", detail: out.reason });
+          else reports.push({ channel: "Email", status: "FAILED", detail: out.reason });
+        }
+      }
+
+      if (reports.length === 0) {
+        pRouting.status = "SKIPPED";
+        pRouting.skippedReason = hasRouting
+          ? "No live channels enabled (XMTP/Discord scaffolded only)"
+          : "No alert routing configured";
+      } else {
+        const summary = reports.map(r => `${r.channel}: ${r.detail}`).join("; ");
+        if (reports.some(r => r.status === "FAILED")) {
+          pRouting.status = "FAILED";
+          pRouting.result = summary;
+        } else if (reports.every(r => r.status === "SKIPPED")) {
+          pRouting.status = "SKIPPED";
+          pRouting.skippedReason = summary;
+        } else {
+          pRouting.status = "COMPLETE";
+          pRouting.result = summary;
+        }
+      }
     }
     pRouting.durationMs = Date.now() - routingStart;
 

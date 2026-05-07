@@ -1064,6 +1064,8 @@ export type HermesConstraintsAlertRouting = {
   telegram: boolean;
   xmtp: boolean;
   discord: boolean;
+  /** AgentMail email delivery channel for APPROVED signals */
+  email: boolean;
 };
 
 /**
@@ -1129,6 +1131,7 @@ export type HermesConstraintsUpdateAlertRouting = {
   telegram?: boolean;
   xmtp?: boolean;
   discord?: boolean;
+  email?: boolean;
 };
 
 export type HermesConstraintsUpdateWaitBiasPolicy =

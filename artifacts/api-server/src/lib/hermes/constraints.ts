@@ -13,7 +13,7 @@ export const DEFAULT_CONSTRAINTS: HermesConstraints = {
   browserbaseTriggerPolicy: "DISABLED",
   pythConfidenceFilter: false,
   pythConfidenceThreshold: 0.95,
-  alertRouting: { telegram: false, xmtp: false, discord: false },
+  alertRouting: { telegram: false, xmtp: false, discord: false, email: false },
   waitBiasPolicy: "STRICT",
   updatedAt: new Date().toISOString(),
 };
@@ -24,8 +24,10 @@ function loadFromDisk(): HermesConstraints {
   try {
     if (fs.existsSync(CONSTRAINTS_PATH)) {
       const data = fs.readFileSync(CONSTRAINTS_PATH, 'utf-8');
-      const parsed = JSON.parse(data);
-      return parsed as HermesConstraints;
+      const parsed = JSON.parse(data) as HermesConstraints;
+      // Backfill new alertRouting channels for older persisted constraint files.
+      parsed.alertRouting = { ...DEFAULT_CONSTRAINTS.alertRouting, ...(parsed.alertRouting ?? {}) };
+      return parsed;
     }
   } catch (error) {
     logger.error({ error }, "Failed to load constraints from disk");
