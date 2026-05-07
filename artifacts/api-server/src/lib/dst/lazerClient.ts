@@ -173,6 +173,19 @@ class LazerStreamManager {
     }
   }
 
+  getLatest(asset: string): LazerFeedTick | null {
+    const tick = this.latest.get(asset);
+    if (!tick) return null;
+    return {
+      ...tick,
+      ageMs: tick.publishTimeMs != null ? Date.now() - tick.publishTimeMs : null,
+    };
+  }
+
+  isConnected(): boolean {
+    return this.status === "CONNECTED";
+  }
+
   snapshot() {
     const now = Date.now();
     const feeds = FEEDS.map((cfg) => {

@@ -15,6 +15,7 @@ export type DataSource =
   | "DEFILLAMA_TVL"
   | "PYTH_HERMES"
   | "PYTH_BENCHMARKS"
+  | "PYTH_LAZER_STREAM"
   | "OKX_PERPS"
   | "SYNTHETIC"
   | "DERIVED"
