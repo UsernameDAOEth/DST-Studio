@@ -2,9 +2,11 @@ import { Router } from "express";
 import { GetAuditByAssetParams } from "@workspace/api-zod";
 import { ASSET_MAP } from "../lib/dst/defillamaClient";
 import { db, signalsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 
 const router = Router();
+
+const VALID_TIMEFRAMES = new Set(["4H", "15m"]);
 
 router.get("/:asset", async (req, res) => {
   const parsed = GetAuditByAssetParams.safeParse(req.params);
@@ -42,10 +44,13 @@ router.get("/:asset", async (req, res) => {
     return;
   }
 
+  const tfRaw = req.query.timeframe;
+  const timeframe = typeof tfRaw === "string" && VALID_TIMEFRAMES.has(tfRaw) ? tfRaw : "4H";
+
   const [latest] = await db
     .select()
     .from(signalsTable)
-    .where(eq(signalsTable.asset, asset))
+    .where(and(eq(signalsTable.asset, asset), eq(signalsTable.timeframe, timeframe)))
     .orderBy(desc(signalsTable.computedAt))
     .limit(1);
 
@@ -56,7 +61,7 @@ router.get("/:asset", async (req, res) => {
 
   // Intentional 404: audit must never recompute independently (snapshot integrity).
   // A signal must be computed via /api/signals first before its audit is available.
-  res.status(404).json({ error: `No stored signal for ${asset}. Trigger a scan first.` });
+  res.status(404).json({ error: `No stored ${timeframe} signal for ${asset}. Trigger a scan first.` });
 });
 
 export default router;

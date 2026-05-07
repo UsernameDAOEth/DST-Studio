@@ -60,6 +60,7 @@ async function resolveInboxId(apiKey: string): Promise<string> {
 interface SignalLike {
   id: number;
   asset: string;
+  timeframe?: string | null;
   direction: string;
   verdictDjzs: string;
   processVerdict: string;
@@ -76,7 +77,8 @@ interface SignalLike {
 }
 
 function dedupKey(signal: SignalLike): string {
-  return `${signal.asset}:${signal.packetHash ?? `id-${signal.id}`}`;
+  const tf = signal.timeframe ?? "4H";
+  return `${tf}:${signal.asset}:${signal.packetHash ?? `id-${signal.id}`}`;
 }
 
 function formatNumber(n: number | null | undefined, digits = 2): string {
@@ -120,10 +122,11 @@ export function formatSignalEmail(signal: SignalLike): FormattedEmail {
     ? `${formatNumber(entryLow)} – ${formatNumber(entryHigh)}`
     : "—";
 
-  const subject = `DST · ${signal.asset} · ${signal.direction} · ${signal.setupFamily}`;
+  const tfLabel = signal.timeframe ?? "4H";
+  const subject = `DST · ${signal.asset} · ${tfLabel} · ${signal.direction} · ${signal.setupFamily}`;
 
   const textLines = [
-    `DST · ${signal.asset} · ${signal.direction}`,
+    `DST · ${signal.asset} · ${tfLabel} · ${signal.direction}`,
     `DJZS: ${signal.verdictDjzs}  Process: ${signal.processVerdict}  Grade: ${signal.processQualityGrade}`,
     `Setup: ${signal.setupFamily}`,
     "",
@@ -141,7 +144,7 @@ export function formatSignalEmail(signal: SignalLike): FormattedEmail {
   const text = textLines.join("\n");
 
   const htmlRows: string[] = [];
-  htmlRows.push(`<h2 style="font-family:monospace;margin:0 0 8px">DST · ${escapeHtml(signal.asset)} · ${escapeHtml(signal.direction)}</h2>`);
+  htmlRows.push(`<h2 style="font-family:monospace;margin:0 0 8px">DST · ${escapeHtml(signal.asset)} · ${escapeHtml(tfLabel)} · ${escapeHtml(signal.direction)}</h2>`);
   htmlRows.push(`<p style="font-family:monospace;color:#555;margin:0 0 12px"><b>DJZS:</b> ${escapeHtml(signal.verdictDjzs)} &nbsp; <b>Process:</b> ${escapeHtml(signal.processVerdict)} &nbsp; <b>Grade:</b> ${escapeHtml(signal.processQualityGrade)} &nbsp; <b>Setup:</b> ${escapeHtml(signal.setupFamily)}</p>`);
   htmlRows.push(`<table style="font-family:monospace;border-collapse:collapse"><tbody>`);
   htmlRows.push(`<tr><td style="padding:2px 12px 2px 0;color:#777">Entry</td><td>${escapeHtml(entryStr)}</td></tr>`);

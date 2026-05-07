@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link } from "wouter";
-import { useGetSignals, useGetMarketSnapshot, useGetSignalFeed, useGetLazerSnapshot, getGetLazerSnapshotQueryKey } from "@workspace/api-client-react";
+import { useGetSignals, useGetMarketSnapshot, useGetSignalFeed, useGetLazerSnapshot, getGetLazerSnapshotQueryKey, getGetSignalsQueryKey, getGetSignalFeedQueryKey } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
@@ -62,8 +63,11 @@ function PriceDivergenceChip({ snapshotPrice, lazerPrice }: { snapshotPrice: num
   );
 }
 
-function AssetCard({ asset }: { asset: string }) {
-  const { data: signals, isLoading: isLoadingSignals } = useGetSignals();
+function AssetCard({ asset, timeframe }: { asset: string; timeframe: "4H" | "15m" }) {
+  const tfParams = { timeframe };
+  const { data: signals, isLoading: isLoadingSignals } = useGetSignals(tfParams, {
+    query: { queryKey: getGetSignalsQueryKey(tfParams) },
+  });
   const { data: snapshots, isLoading: isLoadingMarket } = useGetMarketSnapshot();
   const { data: lazerData } = useGetLazerSnapshot({
     query: { queryKey: getGetLazerSnapshotQueryKey(), refetchInterval: 1000 },
@@ -115,7 +119,7 @@ function AssetCard({ asset }: { asset: string }) {
   const sig = signal as typeof signal & { dataQuality?: { grade?: string; flags?: string[]; pythVerifier?: { verdict?: string } } };
 
   return (
-    <Link href={`/signal/${asset}`} className="block group">
+    <Link href={`/signal/${asset}?timeframe=${timeframe}`} className="block group">
       <div className={cn(
         "terminal-panel transition-all hover:border-primary/30 relative overflow-hidden",
         isWait && "opacity-80"
@@ -192,7 +196,11 @@ function AssetCard({ asset }: { asset: string }) {
 }
 
 export default function Dashboard() {
-  const { data: feed, isLoading: isLoadingFeed } = useGetSignalFeed({ limit: 10 });
+  const [timeframe, setTimeframe] = useState<"4H" | "15m">("4H");
+  const feedParams = { limit: 10, timeframe };
+  const { data: feed, isLoading: isLoadingFeed } = useGetSignalFeed(feedParams, {
+    query: { queryKey: getGetSignalFeedQueryKey(feedParams) },
+  });
 
   const totalWait = feed?.filter(f => f.direction === "WAIT").length ?? 0;
   const totalFeed = feed?.length ?? 0;
@@ -203,9 +211,36 @@ export default function Dashboard() {
     <div className="space-y-8 max-w-6xl mx-auto pb-16">
 
       <div className="pb-5 border-b border-border">
-        <div className="flex items-baseline gap-4 mb-1">
+        <div className="flex items-baseline gap-4 mb-1 flex-wrap">
           <h1 className="text-xl tracking-widest text-foreground">ADMISSIBILITY CONSOLE</h1>
-          <span className="micro-label text-muted-foreground/60">4H · ETH · BTC · SOL · PAPER MODE</span>
+          <span className="micro-label text-muted-foreground/60">ETH · BTC · SOL · PAPER MODE</span>
+          <div className="ml-auto inline-flex border border-border" role="tablist" aria-label="Timeframe">
+            {(["4H", "15m"] as const).map((tf) => {
+              const active = timeframe === tf;
+              return (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => setTimeframe(tf)}
+                  role="tab"
+                  aria-selected={active}
+                  data-testid={`tf-toggle-${tf}`}
+                  className={cn(
+                    "font-mono text-[10px] uppercase tracking-widest px-3 py-1.5 transition-colors",
+                    active
+                      ? "bg-primary/15 text-primary border-r border-border last:border-r-0"
+                      : "text-muted-foreground hover:text-foreground border-r border-border last:border-r-0",
+                  )}
+                  title={tf === "4H" ? "DefiLlama 4H bars" : "Pyth Benchmarks 15m bars"}
+                >
+                  {tf}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="micro-label text-muted-foreground/40 mt-0.5">
+          {timeframe === "4H" ? "DEFILLAMA · 4H BARS" : "PYTH BENCHMARKS TRADINGVIEW SHIM · 15M BARS"}
         </div>
 
         <div className="grid grid-cols-3 border border-border bg-card mt-4">
@@ -236,16 +271,16 @@ export default function Dashboard() {
         )}
 
         <div className="mt-3">
-          <PipelineHealthChip />
+          <PipelineHealthChip timeframe={timeframe} />
         </div>
       </div>
 
       <LazerStreamPanel />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <AssetCard asset="ETH" />
-        <AssetCard asset="BTC" />
-        <AssetCard asset="SOL" />
+        <AssetCard asset="ETH" timeframe={timeframe} />
+        <AssetCard asset="BTC" timeframe={timeframe} />
+        <AssetCard asset="SOL" timeframe={timeframe} />
       </div>
 
       <div className="space-y-3">
@@ -262,6 +297,7 @@ export default function Dashboard() {
               <tr className="bg-secondary border-b border-border">
                 <th className="px-4 py-2 text-left micro-label">TIME</th>
                 <th className="px-4 py-2 text-left micro-label">ASSET</th>
+                <th className="px-4 py-2 text-left micro-label">TF</th>
                 <th className="px-4 py-2 text-left micro-label">DIR</th>
                 <th className="px-4 py-2 text-left micro-label">CONF</th>
                 <th className="px-4 py-2 text-left micro-label">DJZS GATE</th>
@@ -275,7 +311,7 @@ export default function Dashboard() {
               {isLoadingFeed ? (
                 Array(5).fill(0).map((_, i) => (
                   <tr key={i}>
-                    {Array(9).fill(0).map((_, j) => (
+                    {Array(10).fill(0).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <Skeleton className="h-3 w-full rounded-none bg-muted" />
                       </td>
@@ -293,6 +329,7 @@ export default function Dashboard() {
                       {new Date(entry.computedAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="px-4 py-2.5 font-mono text-foreground font-bold tracking-wider">{entry.asset}</td>
+                    <td className="px-4 py-2.5 font-mono text-muted-foreground text-[10px] tracking-wider">{entry.timeframe}</td>
                     <td className="px-4 py-2.5"><DirectionChip direction={entry.direction} /></td>
                     <td className="px-4 py-2.5 font-mono text-muted-foreground mono-nums">{entry.confidence}%</td>
                     <td className="px-4 py-2.5"><VerdictBadge value={gateDisplayVerdict(feedEntry.logicAdmissibility) || entry.verdict} /></td>
@@ -309,7 +346,7 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground max-w-xs truncate">{entry.summary}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <Link href={`/signal/${entry.asset}`}>
+                      <Link href={`/signal/${entry.asset}?timeframe=${entry.timeframe}`}>
                         <div className="inline-flex items-center justify-center p-1 border border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors cursor-pointer">
                           <ArrowRight className="w-3.5 h-3.5" />
                         </div>

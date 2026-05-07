@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.2.0
  */
 import type { SignalFeedEntryDirection } from "./signalFeedEntryDirection";
+import type { SignalFeedEntryLogicAdmissibility } from "./signalFeedEntryLogicAdmissibility";
 import type { SignalFeedEntryProcessVerdict } from "./signalFeedEntryProcessVerdict";
 import type { SignalFeedEntrySetupFamily } from "./signalFeedEntrySetupFamily";
 import type { SignalFeedEntryVerdict } from "./signalFeedEntryVerdict";
@@ -13,8 +14,11 @@ import type { SignalFeedEntryVerdict } from "./signalFeedEntryVerdict";
 export interface SignalFeedEntry {
   id: number;
   asset: string;
+  /** Timeframe of the underlying historical bars ("4H" = DefiLlama, "15m" = Pyth Benchmarks). */
+  timeframe: string;
   direction: SignalFeedEntryDirection;
   verdict: SignalFeedEntryVerdict;
+  logicAdmissibility?: SignalFeedEntryLogicAdmissibility;
   processVerdict: SignalFeedEntryProcessVerdict;
   setupFamily: SignalFeedEntrySetupFamily;
   confidence: number;

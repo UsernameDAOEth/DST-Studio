@@ -5,10 +5,15 @@
  * DST Signal Engine — DJZS Audit Protocol
  * OpenAPI spec version: 0.2.0
  */
+import type { GetAuditByAssetTimeframe } from "./getAuditByAssetTimeframe";
 
 export type GetAuditByAssetParams = {
   /**
    * Pin audit to a specific signal snapshot by ID
    */
   signalId?: number;
+  /**
+   * Timeframe scope when no signalId is pinned (defaults to 4H).
+   */
+  timeframe?: GetAuditByAssetTimeframe;
 };

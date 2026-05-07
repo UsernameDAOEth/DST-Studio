@@ -947,6 +947,15 @@ export const SignalFeedEntryVerdict = {
   WAIT: "WAIT",
 } as const;
 
+export type SignalFeedEntryLogicAdmissibility =
+  (typeof SignalFeedEntryLogicAdmissibility)[keyof typeof SignalFeedEntryLogicAdmissibility];
+
+export const SignalFeedEntryLogicAdmissibility = {
+  ADMISSIBLE: "ADMISSIBLE",
+  INADMISSIBLE: "INADMISSIBLE",
+  CONDITIONAL: "CONDITIONAL",
+} as const;
+
 export type SignalFeedEntryProcessVerdict =
   (typeof SignalFeedEntryProcessVerdict)[keyof typeof SignalFeedEntryProcessVerdict];
 
@@ -971,8 +980,11 @@ export const SignalFeedEntrySetupFamily = {
 export interface SignalFeedEntry {
   id: number;
   asset: string;
+  /** Timeframe of the underlying historical bars ("4H" = DefiLlama, "15m" = Pyth Benchmarks). */
+  timeframe: string;
   direction: SignalFeedEntryDirection;
   verdict: SignalFeedEntryVerdict;
+  logicAdmissibility?: SignalFeedEntryLogicAdmissibility;
   processVerdict: SignalFeedEntryProcessVerdict;
   setupFamily: SignalFeedEntrySetupFamily;
   confidence: number;
@@ -1661,6 +1673,9 @@ export type GetSignalsParams = {
    * Filter by asset symbol (e.g. ETH, BTC, SOL)
    */
   asset?: string;
+  /**
+   * Timeframe scope ("4H" = DefiLlama, "15m" = Pyth Benchmarks).
+   */
   timeframe?: GetSignalsTimeframe;
 };
 
@@ -1668,9 +1683,23 @@ export type GetSignalsTimeframe =
   (typeof GetSignalsTimeframe)[keyof typeof GetSignalsTimeframe];
 
 export const GetSignalsTimeframe = {
-  "1H": "1H",
   "4H": "4H",
-  "1D": "1D",
+  "15m": "15m",
+} as const;
+
+export type GetSignalByAssetParams = {
+  /**
+   * Timeframe scope (default 4H).
+   */
+  timeframe?: GetSignalByAssetTimeframe;
+};
+
+export type GetSignalByAssetTimeframe =
+  (typeof GetSignalByAssetTimeframe)[keyof typeof GetSignalByAssetTimeframe];
+
+export const GetSignalByAssetTimeframe = {
+  "4H": "4H",
+  "15m": "15m",
 } as const;
 
 export type GetAuditByAssetParams = {
@@ -1678,11 +1707,35 @@ export type GetAuditByAssetParams = {
    * Pin audit to a specific signal snapshot by ID
    */
   signalId?: number;
+  /**
+   * Timeframe scope when no signalId is pinned (defaults to 4H).
+   */
+  timeframe?: GetAuditByAssetTimeframe;
 };
+
+export type GetAuditByAssetTimeframe =
+  (typeof GetAuditByAssetTimeframe)[keyof typeof GetAuditByAssetTimeframe];
+
+export const GetAuditByAssetTimeframe = {
+  "4H": "4H",
+  "15m": "15m",
+} as const;
 
 export type GetSignalFeedParams = {
   limit?: number;
+  /**
+   * Restrict the feed to a single timeframe. Omit to return both.
+   */
+  timeframe?: GetSignalFeedTimeframe;
 };
+
+export type GetSignalFeedTimeframe =
+  (typeof GetSignalFeedTimeframe)[keyof typeof GetSignalFeedTimeframe];
+
+export const GetSignalFeedTimeframe = {
+  "4H": "4H",
+  "15m": "15m",
+} as const;
 
 export type GetHermesMetricsParams = {
   period?: GetHermesMetricsPeriod;
@@ -1716,6 +1769,36 @@ export type GetHermesFindingsParams = {
   limit?: number;
 };
 
+export type GetDstPipelineHealthParams = {
+  /**
+   * Per-timeframe scope (default 4H).
+   */
+  timeframe?: GetDstPipelineHealthTimeframe;
+};
+
+export type GetDstPipelineHealthTimeframe =
+  (typeof GetDstPipelineHealthTimeframe)[keyof typeof GetDstPipelineHealthTimeframe];
+
+export const GetDstPipelineHealthTimeframe = {
+  "4H": "4H",
+  "15m": "15m",
+} as const;
+
+export type GetDstShortBottleneckParams = {
+  /**
+   * Per-timeframe scope (default 4H).
+   */
+  timeframe?: GetDstShortBottleneckTimeframe;
+};
+
+export type GetDstShortBottleneckTimeframe =
+  (typeof GetDstShortBottleneckTimeframe)[keyof typeof GetDstShortBottleneckTimeframe];
+
+export const GetDstShortBottleneckTimeframe = {
+  "4H": "4H",
+  "15m": "15m",
+} as const;
+
 export type GetDstShortBottleneckSignalsParams = {
   bucket: GetDstShortBottleneckSignalsBucket;
   /**
@@ -1723,6 +1806,10 @@ export type GetDstShortBottleneckSignalsParams = {
    * @minLength 1
    */
   name: string;
+  /**
+   * Per-timeframe scope (default 4H).
+   */
+  timeframe?: GetDstShortBottleneckSignalsTimeframe;
 };
 
 export type GetDstShortBottleneckSignalsBucket =
@@ -1735,4 +1822,12 @@ export const GetDstShortBottleneckSignalsBucket = {
   skippedCheck: "skippedCheck",
   setup: "setup",
   verdict: "verdict",
+} as const;
+
+export type GetDstShortBottleneckSignalsTimeframe =
+  (typeof GetDstShortBottleneckSignalsTimeframe)[keyof typeof GetDstShortBottleneckSignalsTimeframe];
+
+export const GetDstShortBottleneckSignalsTimeframe = {
+  "4H": "4H",
+  "15m": "15m",
 } as const;

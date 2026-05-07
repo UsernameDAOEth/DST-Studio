@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { signalsTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { computeSignal } from "../lib/dst/signalEngine";
 import { persistSignal } from "../lib/dst/persistSignal";
 import {
@@ -14,11 +14,19 @@ import { fetchPythSnapshot } from "../lib/pyth/pythClient";
 
 const router = Router();
 
-async function getOrComputeSignal(asset: string) {
+const VALID_TIMEFRAMES = new Set(["4H", "15m"]);
+const DEFAULT_TIMEFRAME = "4H";
+
+function normalizeTimeframe(input: unknown): string {
+  if (typeof input === "string" && VALID_TIMEFRAMES.has(input)) return input;
+  return DEFAULT_TIMEFRAME;
+}
+
+async function getOrComputeSignal(asset: string, timeframe: string) {
   const recent = await db
     .select()
     .from(signalsTable)
-    .where(eq(signalsTable.asset, asset))
+    .where(and(eq(signalsTable.asset, asset), eq(signalsTable.timeframe, timeframe)))
     .orderBy(desc(signalsTable.computedAt))
     .limit(1);
 
@@ -27,7 +35,7 @@ async function getOrComputeSignal(asset: string) {
     return recent[0];
   }
 
-  const signal = await computeSignal(asset);
+  const signal = await computeSignal(asset, timeframe);
   // Delivery is intentionally NOT triggered here — routing is owned by the
   // Hermes scan loop (see hermes/scan.ts ROUTING phase) so HTTP read paths
   // never produce side-effect alerts.
@@ -66,19 +74,28 @@ function mapSignalRow(row: typeof signalsTable.$inferSelect) {
 router.get("/", async (req, res) => {
   const params = GetSignalsQueryParams.safeParse(req.query);
   const asset = params.success ? params.data.asset : undefined;
+  const timeframe = normalizeTimeframe(req.query.timeframe);
   const assets = asset ? [asset.toUpperCase()] : Object.keys(ASSET_MAP);
 
-  const rows = await Promise.all(assets.map(getOrComputeSignal));
+  const rows = await Promise.all(assets.map((a) => getOrComputeSignal(a, timeframe)));
   res.json(rows.filter(Boolean).map(mapSignalRow));
 });
 
 router.get("/feed", async (req, res) => {
   const params = GetSignalFeedQueryParams.safeParse(req.query);
   const limit = params.success ? (params.data.limit ?? 20) : 20;
+  const timeframeRaw = req.query.timeframe;
+  const timeframeFilter = typeof timeframeRaw === "string" && VALID_TIMEFRAMES.has(timeframeRaw)
+    ? timeframeRaw
+    : null;
 
-  const rows = await db
+  const baseQuery = db
     .select()
-    .from(signalsTable)
+    .from(signalsTable);
+  const rows = await (timeframeFilter
+    ? baseQuery.where(eq(signalsTable.timeframe, timeframeFilter))
+    : baseQuery
+  )
     .orderBy(desc(signalsTable.computedAt))
     .limit(limit);
 
@@ -86,6 +103,7 @@ router.get("/feed", async (req, res) => {
     rows.map((r) => ({
       id: r.id,
       asset: r.asset,
+      timeframe: r.timeframe,
       direction: r.direction,
       verdict: r.verdictDjzs,
       logicAdmissibility: r.logicAdmissibility,
@@ -93,7 +111,7 @@ router.get("/feed", async (req, res) => {
       setupFamily: r.setupFamily,
       confidence: Number(r.confidence),
       rrRatio: Number(r.rrRatio),
-      summary: `${r.asset} ${r.direction} — DJZS ${r.logicAdmissibility === "ADMISSIBLE" ? "PASS" : r.logicAdmissibility === "CONDITIONAL" ? "WAIT" : r.logicAdmissibility === "INADMISSIBLE" ? "FAIL" : r.verdictDjzs} — Confidence ${Number(r.confidence).toFixed(0)}%`,
+      summary: `${r.asset} ${r.timeframe} ${r.direction} — DJZS ${r.logicAdmissibility === "ADMISSIBLE" ? "PASS" : r.logicAdmissibility === "CONDITIONAL" ? "WAIT" : r.logicAdmissibility === "INADMISSIBLE" ? "FAIL" : r.verdictDjzs} — Confidence ${Number(r.confidence).toFixed(0)}%`,
       computedAt: r.computedAt.toISOString(),
     }))
   );
@@ -110,9 +128,10 @@ router.get("/:asset", async (req, res) => {
     res.status(404).json({ error: `Unknown asset: ${asset}` });
     return;
   }
+  const timeframe = normalizeTimeframe(req.query.timeframe);
 
   const [row, pythSnapshot] = await Promise.all([
-    getOrComputeSignal(asset),
+    getOrComputeSignal(asset, timeframe),
     fetchPythSnapshot(asset).catch(() => null),
   ]);
 

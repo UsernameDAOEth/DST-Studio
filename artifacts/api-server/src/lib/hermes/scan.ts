@@ -28,13 +28,24 @@ export function getScanStatus(): HermesScanStatus {
   };
 }
 
+// Both timeframes are scanned every trigger. 4H stays DefiLlama-sourced
+// (legacy, byte-identical); 15m is powered by the Pyth Benchmarks TradingView
+// shim. Each (asset, timeframe) pair runs the full DJZS audit independently
+// and persists as a separate row in `signals`.
+const SCAN_TIMEFRAMES = ["4H", "15m"] as const;
+
 export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
   const constraints = getConstraints();
   lastRunAt = new Date().toISOString();
 
-  const jobs: HermesJob[] = assets.map(asset => ({
+  const pairs: { asset: string; timeframe: string }[] = [];
+  for (const asset of assets) {
+    for (const tf of SCAN_TIMEFRAMES) pairs.push({ asset, timeframe: tf });
+  }
+
+  const jobs: HermesJob[] = pairs.map(({ asset, timeframe }) => ({
     id: Math.random().toString(36).substring(2, 15),
-    asset,
+    asset: timeframe === "4H" ? asset : `${asset} (${timeframe})`,
     scanStartedAt: new Date().toISOString(),
     scanCompletedAt: null,
     phases: [
@@ -53,18 +64,19 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
 
   recentJobs = [...jobs, ...recentJobs].slice(0, 50);
 
-  await Promise.all(jobs.map(async (job) => {
+  await Promise.all(jobs.map(async (job, idx) => {
     const start = Date.now();
+    const pair = pairs[idx];
 
     const pDefi = job.phases.find(p => p.stage === "DEFILAMMA")!;
     pDefi.status = "RUNNING";
     let signal;
     let persistedSignal: Awaited<ReturnType<typeof persistSignal>> | null = null;
     try {
-      signal = await computeSignal(job.asset, constraints.activeTimeframe);
+      signal = await computeSignal(pair.asset, pair.timeframe);
       pDefi.status = "COMPLETE";
     } catch (err) {
-      logger.error({ err, asset: job.asset }, "Signal compute failed in Hermes scan");
+      logger.error({ err, asset: pair.asset, timeframe: pair.timeframe }, "Signal compute failed in Hermes scan");
       pDefi.status = "FAILED";
       pDefi.result = "Error computing signal";
     }
@@ -178,7 +190,7 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
     triggeredAt: lastRunAt,
     assets,
     jobIds: jobs.map(j => j.id),
-    message: `Triggered scan for ${assets.length} asset${assets.length !== 1 ? "s" : ""}`,
+    message: `Triggered scan for ${assets.length} asset${assets.length !== 1 ? "s" : ""} × ${SCAN_TIMEFRAMES.length} timeframes`,
   };
 }
 

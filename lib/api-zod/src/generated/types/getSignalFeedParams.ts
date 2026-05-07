@@ -5,7 +5,12 @@
  * DST Signal Engine — DJZS Audit Protocol
  * OpenAPI spec version: 0.2.0
  */
+import type { GetSignalFeedTimeframe } from "./getSignalFeedTimeframe";
 
 export type GetSignalFeedParams = {
   limit?: number;
+  /**
+   * Restrict the feed to a single timeframe. Omit to return both.
+   */
+  timeframe?: GetSignalFeedTimeframe;
 };

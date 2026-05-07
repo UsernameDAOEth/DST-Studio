@@ -21,10 +21,11 @@ type BucketKind =
 
 type Selection = { bucket: BucketKind; name: string };
 
-function SignalDrilldown({ selection }: { selection: Selection }) {
+function SignalDrilldown({ selection, timeframe }: { selection: Selection; timeframe: "4H" | "15m" }) {
+  const params = { bucket: selection.bucket, name: selection.name, timeframe };
   const { data, isLoading, isError } = useGetDstShortBottleneckSignals(
-    { bucket: selection.bucket, name: selection.name },
-    { query: { queryKey: getGetDstShortBottleneckSignalsQueryKey(selection) } },
+    params,
+    { query: { queryKey: getGetDstShortBottleneckSignalsQueryKey(params) } },
   );
   const [assetFilter, setAssetFilter] = useState("");
   const [verdictFilter, setVerdictFilter] = useState("");
@@ -142,7 +143,7 @@ function SignalDrilldown({ selection }: { selection: Selection }) {
       {filtered.map((s) => (
         <Link
           key={s.id}
-          href={`/audit/${s.asset}?signalId=${s.id}`}
+          href={`/audit/${s.asset}?signalId=${s.id}&timeframe=${timeframe}`}
           className="font-mono text-[10px] flex items-center gap-2 mono-nums hover:text-primary"
           data-testid={`bottleneck-signal-${s.id}`}
           title={`View pinned audit report for signal #${s.id}`}
@@ -176,12 +177,14 @@ function BucketList({
   items,
   selection,
   onSelect,
+  timeframe,
 }: {
   label: string;
   bucket: BucketKind;
   items: Bucket[];
   selection: Selection | null;
   onSelect: (s: Selection | null) => void;
+  timeframe: "4H" | "15m";
 }) {
   if (items.length === 0) return null;
   return (
@@ -215,7 +218,7 @@ function BucketList({
               </button>
               {isOpen && (
                 <div className="mt-1 mb-1">
-                  <SignalDrilldown selection={{ bucket, name: b.name }} />
+                  <SignalDrilldown selection={{ bucket, name: b.name }} timeframe={timeframe} />
                 </div>
               )}
             </div>
@@ -226,13 +229,19 @@ function BucketList({
   );
 }
 
-export function PipelineHealthChip() {
-  const { data, isLoading } = useGetDstPipelineHealth();
+export function PipelineHealthChip({ timeframe = "4H" }: { timeframe?: "4H" | "15m" }) {
+  const tfParams = { timeframe };
+  const { data, isLoading } = useGetDstPipelineHealth(tfParams, {
+    query: { queryKey: ["pipeline-health", timeframe] },
+  });
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
 
-  const { data: bottleneck, isError: bottleneckError } = useGetDstShortBottleneck({
-    query: { enabled: open, queryKey: getGetDstShortBottleneckQueryKey() },
+  const { data: bottleneck, isError: bottleneckError } = useGetDstShortBottleneck(tfParams, {
+    query: {
+      enabled: open,
+      queryKey: getGetDstShortBottleneckQueryKey(tfParams),
+    },
   });
 
   if (isLoading || !data) return null;
@@ -248,7 +257,7 @@ export function PipelineHealthChip() {
       )}
     >
       <div className="flex items-center gap-3 px-3 py-2">
-        <div className="micro-label text-muted-foreground">PIPELINE 7D</div>
+        <div className="micro-label text-muted-foreground">PIPELINE 7D · {timeframe}</div>
         <div className="font-mono text-[10px] text-foreground mono-nums">
           L:{longCount} <span className="text-muted-foreground">/</span> S:{shortCount}{" "}
           <span className="text-muted-foreground">·</span> SHORT {sharePct}%
@@ -312,6 +321,7 @@ export function PipelineHealthChip() {
                   items={bottleneck.rejectionCodes}
                   selection={selection}
                   onSelect={setSelection}
+                  timeframe={timeframe}
                 />
                 <BucketList
                   label="FAILING CHECKS"
@@ -319,6 +329,7 @@ export function PipelineHealthChip() {
                   items={bottleneck.failingChecks}
                   selection={selection}
                   onSelect={setSelection}
+                  timeframe={timeframe}
                 />
                 <BucketList
                   label="REASON CODES"
@@ -326,6 +337,7 @@ export function PipelineHealthChip() {
                   items={bottleneck.reasonCodes}
                   selection={selection}
                   onSelect={setSelection}
+                  timeframe={timeframe}
                 />
                 <BucketList
                   label="SETUP FAMILIES"
@@ -333,6 +345,7 @@ export function PipelineHealthChip() {
                   items={bottleneck.setupFamilies}
                   selection={selection}
                   onSelect={setSelection}
+                  timeframe={timeframe}
                 />
                 <BucketList
                   label="SKIPPED CHECKS"
@@ -340,6 +353,7 @@ export function PipelineHealthChip() {
                   items={bottleneck.skippedChecks}
                   selection={selection}
                   onSelect={setSelection}
+                  timeframe={timeframe}
                 />
                 <BucketList
                   label="VERDICTS"
@@ -347,6 +361,7 @@ export function PipelineHealthChip() {
                   items={bottleneck.verdicts}
                   selection={selection}
                   onSelect={setSelection}
+                  timeframe={timeframe}
                 />
               </div>
             </>

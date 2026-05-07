@@ -10,6 +10,7 @@ import {
   PRICE_STALE_THRESHOLD_MS,
   type HistoricalPrice,
 } from "./defillamaClient";
+import { getHistorical15mWithProvenance } from "../pyth/benchmarksClient";
 import { lastEma, rsi, macd, atr } from "./indicators";
 import { normalizeInputs, hashPacket } from "./normalization";
 import { runFastPathVerification, type VerificationReport } from "./verification";
@@ -518,9 +519,16 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   const startMs = Date.now();
   logger.info({ asset, timeframe }, "Computing signal");
 
+  // Timeframe routing: "4H" → DefiLlama (legacy, byte-identical), "15m" → Pyth
+  // Benchmarks TradingView shim. The result shape is identical so the rest of
+  // the engine is timeframe-agnostic.
+  const histPromise = timeframe === "15m"
+    ? getHistorical15mWithProvenance(asset)
+    : getHistoricalPricesWithProvenance(asset, 200);
+
   const [priceResult, histResult, tvlResult, globalResult, pythResult] = await Promise.allSettled([
     getCurrentPricesWithProvenance([asset]),
-    getHistoricalPricesWithProvenance(asset, 200),
+    histPromise,
     getTvlForAssetWithProvenance(asset),
     getGlobalDerivativeData(),
     fetchPythSnapshot(asset),
@@ -555,6 +563,7 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   if (!histData || histData.missing) {
     qualityFlags.push("MISSING_HISTORY");
     qualityFlags.push("INSUFFICIENT_HISTORY");
+    if (timeframe === "15m") qualityFlags.push("PYTH_BENCHMARKS_UNAVAILABLE");
   } else if (histData.insufficient) {
     qualityFlags.push("INSUFFICIENT_HISTORY");
   } else if (histData.provenance.isStale) {
@@ -576,7 +585,11 @@ export async function computeSignal(asset: string, timeframe = "4H"): Promise<Co
   }
 
   // ── Price change calculation ────────────────────────────────────────────────
-  const prev24Price = priceSeries.length > 6 ? priceSeries[priceSeries.length - 7] : currentPrice;
+  // 4H bars: 24h = 6 bars back. 15m bars: 24h = 96 bars back.
+  const prev24LookbackBars = timeframe === "15m" ? 96 : 6;
+  const prev24Price = priceSeries.length > prev24LookbackBars
+    ? priceSeries[priceSeries.length - 1 - prev24LookbackBars]
+    : currentPrice;
   const priceChange24h = currentPrice - prev24Price;
   const priceChangePct24h = prev24Price > 0 ? (priceChange24h / prev24Price) * 100 : 0;
   const marketCap = await getMarketCapFromPrices(asset, currentPrice);

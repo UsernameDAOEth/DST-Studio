@@ -12,5 +12,8 @@ export type GetSignalsParams = {
    * Filter by asset symbol (e.g. ETH, BTC, SOL)
    */
   asset?: string;
+  /**
+   * Timeframe scope ("4H" = DefiLlama, "15m" = Pyth Benchmarks).
+   */
   timeframe?: GetSignalsTimeframe;
 };

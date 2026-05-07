@@ -6,6 +6,13 @@ const router: IRouter = Router();
 
 const WINDOW_DAYS = 7;
 const TOP_LIMIT = 10;
+const VALID_TIMEFRAMES = new Set(["4H", "15m"]);
+const DEFAULT_TIMEFRAME = "4H";
+
+function pickTimeframe(raw: unknown): string {
+  if (typeof raw === "string" && VALID_TIMEFRAMES.has(raw)) return raw;
+  return DEFAULT_TIMEFRAME;
+}
 
 function bump(m: Map<string, number>, k: string): void {
   m.set(k, (m.get(k) ?? 0) + 1);
@@ -30,6 +37,7 @@ function pickTopName(m: Map<string, number>): string | null {
 
 router.get("/pipeline-health", async (req, res): Promise<void> => {
   try {
+    const timeframe = pickTimeframe(req.query.timeframe);
     const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const rows = await db
       .select({
@@ -37,7 +45,10 @@ router.get("/pipeline-health", async (req, res): Promise<void> => {
         processVerdict: signalsTable.processVerdict,
       })
       .from(signalsTable)
-      .where(gte(signalsTable.computedAt, since));
+      .where(and(
+        gte(signalsTable.computedAt, since),
+        eq(signalsTable.timeframe, timeframe),
+      ));
 
     let longCount = 0;
     let shortCount = 0;
@@ -65,6 +76,7 @@ router.get("/pipeline-health", async (req, res): Promise<void> => {
 
     res.json({
       windowDays: WINDOW_DAYS,
+      timeframe,
       longCount,
       shortCount,
       waitCount,
@@ -82,6 +94,7 @@ router.get("/pipeline-health", async (req, res): Promise<void> => {
 
 router.get("/pipeline-health/short-bottleneck", async (req, res): Promise<void> => {
   try {
+    const timeframe = pickTimeframe(req.query.timeframe);
     const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const rows = await db
       .select({
@@ -93,7 +106,11 @@ router.get("/pipeline-health/short-bottleneck", async (req, res): Promise<void> 
         auditReport: signalsTable.auditReport,
       })
       .from(signalsTable)
-      .where(and(eq(signalsTable.direction, "SHORT"), gte(signalsTable.computedAt, since)))
+      .where(and(
+        eq(signalsTable.direction, "SHORT"),
+        gte(signalsTable.computedAt, since),
+        eq(signalsTable.timeframe, timeframe),
+      ))
       .orderBy(desc(signalsTable.computedAt));
 
     const verdictCounts = new Map<string, number>();
@@ -132,6 +149,7 @@ router.get("/pipeline-health/short-bottleneck", async (req, res): Promise<void> 
 
     res.json({
       windowDays: WINDOW_DAYS,
+      timeframe,
       totalShorts: rows.length,
       approvedShorts,
       shortPipelineBroken,
@@ -171,6 +189,7 @@ router.get(
         res.status(400).json({ error: "invalid_bucket_or_name" });
         return;
       }
+      const timeframe = pickTimeframe(req.query.timeframe);
 
       const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
       const rows = await db
@@ -186,9 +205,11 @@ router.get(
           thesis: signalsTable.thesis,
         })
         .from(signalsTable)
-        .where(
-          and(eq(signalsTable.direction, "SHORT"), gte(signalsTable.computedAt, since)),
-        )
+        .where(and(
+          eq(signalsTable.direction, "SHORT"),
+          gte(signalsTable.computedAt, since),
+          eq(signalsTable.timeframe, timeframe),
+        ))
         .orderBy(desc(signalsTable.computedAt));
 
       const matches = rows.filter((r) => {
@@ -217,6 +238,7 @@ router.get(
 
       res.json({
         windowDays: WINDOW_DAYS,
+        timeframe,
         bucket,
         name,
         total: matches.length,

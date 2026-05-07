@@ -1,4 +1,4 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useSearch } from "wouter";
 import { useGetSignalByAsset, getGetSignalByAssetQueryKey, useGetHermesConstraints } from "@workspace/api-client-react";
 import { formatCurrency, formatPercent, formatNumber, formatLargeNumber } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -208,9 +208,13 @@ function PipelineIndicators({ dataQuality, constraints }: {
 
 export default function SignalDetail() {
   const { asset } = useParams();
+  const searchString = useSearch();
+  const tfRaw = new URLSearchParams(searchString).get("timeframe");
+  const timeframe: "4H" | "15m" = tfRaw === "15m" ? "15m" : "4H";
+  const tfParams = { timeframe };
 
-  const { data: signal, isLoading } = useGetSignalByAsset(asset || "", {
-    query: { enabled: !!asset, queryKey: getGetSignalByAssetQueryKey(asset || "") }
+  const { data: signal, isLoading } = useGetSignalByAsset(asset || "", tfParams, {
+    query: { enabled: !!asset, queryKey: getGetSignalByAssetQueryKey(asset || "", tfParams) }
   });
 
   const { data: hermesConstraints } = useGetHermesConstraints();
@@ -252,8 +256,8 @@ export default function SignalDetail() {
   const isWait = signal.direction === "WAIT";
   const isApproved = signal.processVerdict === "APPROVED";
   const auditLink = signal.id
-    ? `/audit/${asset}?signalId=${signal.id}`
-    : `/audit/${asset}`;
+    ? `/audit/${asset}?signalId=${signal.id}&timeframe=${timeframe}`
+    : `/audit/${asset}?timeframe=${timeframe}`;
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-16">
@@ -292,7 +296,7 @@ export default function SignalDetail() {
               )}
             </div>
             <div className="font-mono text-[9px] text-muted-foreground/60 uppercase tracking-widest mt-1.5">
-              4H · COMPUTED {new Date(signal.computedAt).toLocaleString()} · PAPER MODE
+              {timeframe} · COMPUTED {new Date(signal.computedAt).toLocaleString()} · PAPER MODE
             </div>
           </div>
 

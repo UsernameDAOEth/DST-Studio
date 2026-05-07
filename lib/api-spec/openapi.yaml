@@ -58,8 +58,9 @@ paths:
           in: query
           schema:
             type: string
-            enum: [1H, 4H, 1D]
-            default: 4H
+            enum: ["4H", "15m"]
+            default: "4H"
+          description: Timeframe scope ("4H" = DefiLlama, "15m" = Pyth Benchmarks).
       responses:
         "200":
           description: List of signals
@@ -81,6 +82,14 @@ paths:
           required: true
           schema:
             type: string
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["4H", "15m"]
+            default: "4H"
+          description: Timeframe scope (default 4H).
       responses:
         "200":
           description: Signal with full breakdown
@@ -140,6 +149,14 @@ paths:
           schema:
             type: integer
           description: Pin audit to a specific signal snapshot by ID
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["4H", "15m"]
+            default: "4H"
+          description: Timeframe scope when no signalId is pinned (defaults to 4H).
       responses:
         "200":
           description: Full DJZS audit report
@@ -274,6 +291,13 @@ paths:
           schema:
             type: integer
             default: 20
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["4H", "15m"]
+          description: Restrict the feed to a single timeframe. Omit to return both.
       responses:
         "200":
           description: Signal feed
@@ -773,6 +797,15 @@ paths:
         the last 7 days. `shortPipelineBroken` is true when SHORTs were emitted
         but none reached APPROVED — indicates the audit layer is killing every
         SHORT (root-cause symptom of the asymmetric-bias bug class).
+      parameters:
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["4H", "15m"]
+            default: "4H"
+          description: Per-timeframe scope (default 4H).
       responses:
         "200":
           description: Pipeline health snapshot
@@ -793,6 +826,15 @@ paths:
         `pnpm --filter @workspace/scripts run short-pipeline-invariant:db`
         report so the dashboard can surface the cause of "SHORT PIPELINE BROKEN"
         without shelling in. Read-only.
+      parameters:
+        - name: timeframe
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["4H", "15m"]
+            default: "4H"
+          description: Per-timeframe scope (default 4H).
       responses:
         "200":
           description: SHORT bottleneck breakdown
@@ -826,6 +868,14 @@ paths:
             type: string
             minLength: 1
           description: The bucket value to filter by (e.g. "BEAR_REGIME", "RR_BELOW_THRESHOLD").
+        - in: query
+          name: timeframe
+          required: false
+          schema:
+            type: string
+            enum: ["4H", "15m"]
+            default: "4H"
+          description: Per-timeframe scope (default 4H).
       responses:
         "200":
           description: Matching SHORT signals
@@ -1527,12 +1577,18 @@ components:
           type: integer
         asset:
           type: string
+        timeframe:
+          type: string
+          description: Timeframe of the underlying historical bars ("4H" = DefiLlama, "15m" = Pyth Benchmarks).
         direction:
           type: string
           enum: [LONG, SHORT, WAIT]
         verdict:
           type: string
           enum: [PASS, FAIL, WAIT]
+        logicAdmissibility:
+          type: string
+          enum: [ADMISSIBLE, INADMISSIBLE, CONDITIONAL]
         processVerdict:
           type: string
           enum: [APPROVED, REJECTED, DEGRADED]
@@ -1551,6 +1607,7 @@ components:
       required:
         - id
         - asset
+        - timeframe
         - direction
         - verdict
         - processVerdict

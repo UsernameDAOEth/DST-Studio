@@ -45,6 +45,7 @@ function formatNumber(n: number | null | undefined, digits = 2): string {
 interface SignalLike {
   id: number;
   asset: string;
+  timeframe?: string | null;
   direction: string;
   verdictDjzs: string;
   processVerdict: string;
@@ -61,7 +62,8 @@ interface SignalLike {
 }
 
 function dedupKey(signal: SignalLike): string {
-  return `${signal.asset}:${signal.packetHash ?? `id-${signal.id}`}`;
+  const tf = signal.timeframe ?? "4H";
+  return `${tf}:${signal.asset}:${signal.packetHash ?? `id-${signal.id}`}`;
 }
 
 function buildSignalUrl(asset: string): string | null {
@@ -82,7 +84,8 @@ export function formatSignalMessage(signal: SignalLike): string {
   const url = buildSignalUrl(signal.asset);
 
   const lines: string[] = [];
-  lines.push(`*DST · ${escapeMd(signal.asset)} · ${escapeMd(signal.direction)}*`);
+  const tfLabel = signal.timeframe ?? "4H";
+  lines.push(`*DST · ${escapeMd(signal.asset)} · ${escapeMd(tfLabel)} · ${escapeMd(signal.direction)}*`);
   lines.push(`DJZS: \`${escapeMd(signal.verdictDjzs)}\` · Process: \`${escapeMd(signal.processVerdict)}\` · Grade: \`${escapeMd(signal.processQualityGrade)}\``);
   lines.push(`Setup: \`${escapeMd(signal.setupFamily)}\``);
   lines.push("");

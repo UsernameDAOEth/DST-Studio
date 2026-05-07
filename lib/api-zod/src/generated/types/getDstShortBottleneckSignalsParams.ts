@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.2.0
  */
 import type { GetDstShortBottleneckSignalsBucket } from "./getDstShortBottleneckSignalsBucket";
+import type { GetDstShortBottleneckSignalsTimeframe } from "./getDstShortBottleneckSignalsTimeframe";
 
 export type GetDstShortBottleneckSignalsParams = {
   bucket: GetDstShortBottleneckSignalsBucket;
@@ -14,4 +15,8 @@ export type GetDstShortBottleneckSignalsParams = {
    * @minLength 1
    */
   name: string;
+  /**
+   * Per-timeframe scope (default 4H).
+   */
+  timeframe?: GetDstShortBottleneckSignalsTimeframe;
 };

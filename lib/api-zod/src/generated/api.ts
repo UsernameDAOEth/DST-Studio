@@ -25,8 +25,11 @@ export const GetSignalsQueryParams = zod.object({
     .optional()
     .describe("Filter by asset symbol (e.g. ETH, BTC, SOL)"),
   timeframe: zod
-    .enum(["1H", "4H", "1D"])
-    .default(getSignalsQueryTimeframeDefault),
+    .enum(["4H", "15m"])
+    .default(getSignalsQueryTimeframeDefault)
+    .describe(
+      'Timeframe scope (\"4H\" = DefiLlama, \"15m\" = Pyth Benchmarks).',
+    ),
 });
 
 export const GetSignalsResponseItem = zod
@@ -120,6 +123,15 @@ export const GetSignalsResponse = zod.array(GetSignalsResponseItem);
  */
 export const GetSignalByAssetParams = zod.object({
   asset: zod.coerce.string(),
+});
+
+export const getSignalByAssetQueryTimeframeDefault = `4H`;
+
+export const GetSignalByAssetQueryParams = zod.object({
+  timeframe: zod
+    .enum(["4H", "15m"])
+    .default(getSignalByAssetQueryTimeframeDefault)
+    .describe("Timeframe scope (default 4H)."),
 });
 
 export const getSignalByAssetResponseTwoHermesContextActiveFindingsItemConfidenceMin = 0;
@@ -927,11 +939,17 @@ export const GetAuditByAssetParams = zod.object({
   asset: zod.coerce.string(),
 });
 
+export const getAuditByAssetQueryTimeframeDefault = `4H`;
+
 export const GetAuditByAssetQueryParams = zod.object({
   signalId: zod.coerce
     .number()
     .optional()
     .describe("Pin audit to a specific signal snapshot by ID"),
+  timeframe: zod
+    .enum(["4H", "15m"])
+    .default(getAuditByAssetQueryTimeframeDefault)
+    .describe("Timeframe scope when no signalId is pinned (defaults to 4H)."),
 });
 
 export const GetAuditByAssetResponse = zod.object({
@@ -1056,13 +1074,25 @@ export const getSignalFeedQueryLimitDefault = 20;
 
 export const GetSignalFeedQueryParams = zod.object({
   limit: zod.coerce.number().default(getSignalFeedQueryLimitDefault),
+  timeframe: zod
+    .enum(["4H", "15m"])
+    .optional()
+    .describe("Restrict the feed to a single timeframe. Omit to return both."),
 });
 
 export const GetSignalFeedResponseItem = zod.object({
   id: zod.number(),
   asset: zod.string(),
+  timeframe: zod
+    .string()
+    .describe(
+      'Timeframe of the underlying historical bars (\"4H\" = DefiLlama, \"15m\" = Pyth Benchmarks).',
+    ),
   direction: zod.enum(["LONG", "SHORT", "WAIT"]),
   verdict: zod.enum(["PASS", "FAIL", "WAIT"]),
+  logicAdmissibility: zod
+    .enum(["ADMISSIBLE", "INADMISSIBLE", "CONDITIONAL"])
+    .optional(),
   processVerdict: zod.enum(["APPROVED", "REJECTED", "DEGRADED"]),
   setupFamily: zod.enum([
     "TREND_CONTINUATION_LONG",
@@ -2880,6 +2910,15 @@ export const GetPythSnapshotBySymbolResponse = zod
 
  * @summary SHORT/LONG/WAIT distribution + per-direction approval rates over the last 7 days
  */
+export const getDstPipelineHealthQueryTimeframeDefault = `4H`;
+
+export const GetDstPipelineHealthQueryParams = zod.object({
+  timeframe: zod
+    .enum(["4H", "15m"])
+    .default(getDstPipelineHealthQueryTimeframeDefault)
+    .describe("Per-timeframe scope (default 4H)."),
+});
+
 export const GetDstPipelineHealthResponse = zod.object({
   windowDays: zod
     .number()
@@ -2911,6 +2950,15 @@ export const GetDstPipelineHealthResponse = zod.object({
 
  * @summary SHORT pipeline bottleneck breakdown for the last 7 days
  */
+export const getDstShortBottleneckQueryTimeframeDefault = `4H`;
+
+export const GetDstShortBottleneckQueryParams = zod.object({
+  timeframe: zod
+    .enum(["4H", "15m"])
+    .default(getDstShortBottleneckQueryTimeframeDefault)
+    .describe("Per-timeframe scope (default 4H)."),
+});
+
 export const GetDstShortBottleneckResponse = zod.object({
   windowDays: zod.number(),
   totalShorts: zod.number(),
@@ -2977,6 +3025,8 @@ export const GetDstShortBottleneckResponse = zod.object({
  * @summary SHORT signals from the last 7 days that fall into a specific bottleneck bucket
  */
 
+export const getDstShortBottleneckSignalsQueryTimeframeDefault = `4H`;
+
 export const GetDstShortBottleneckSignalsQueryParams = zod.object({
   bucket: zod.enum([
     "rejection",
@@ -2992,6 +3042,10 @@ export const GetDstShortBottleneckSignalsQueryParams = zod.object({
     .describe(
       'The bucket value to filter by (e.g. \"BEAR_REGIME\", \"RR_BELOW_THRESHOLD\").',
     ),
+  timeframe: zod
+    .enum(["4H", "15m"])
+    .default(getDstShortBottleneckSignalsQueryTimeframeDefault)
+    .describe("Per-timeframe scope (default 4H)."),
 });
 
 export const GetDstShortBottleneckSignalsResponse = zod.object({

@@ -12,7 +12,11 @@ export default function Audit() {
   const searchParams = new URLSearchParams(searchString);
   const signalId = searchParams.get("signalId");
 
-  const queryParams = signalId ? { signalId: Number(signalId) } : undefined;
+  const tfRaw = searchParams.get("timeframe");
+  const timeframe: "4H" | "15m" = tfRaw === "15m" ? "15m" : "4H";
+  const queryParams = signalId
+    ? { signalId: Number(signalId), timeframe }
+    : { timeframe };
 
   const { data: audit, isLoading } = useGetAuditByAsset(asset || "", queryParams, {
     query: {
@@ -56,7 +60,7 @@ export default function Audit() {
       <div className="pb-4 border-b border-border flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <Link href={`/signal/${asset}`}>
+            <Link href={`/signal/${asset}?timeframe=${timeframe}`}>
               <div className="p-1 border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors cursor-pointer">
                 <ArrowLeft className="w-4 h-4" />
               </div>

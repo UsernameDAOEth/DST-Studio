@@ -29,11 +29,14 @@ import type {
   DstShortBottleneck,
   DstShortBottleneckSignals,
   GetAuditByAssetParams,
+  GetDstPipelineHealthParams,
+  GetDstShortBottleneckParams,
   GetDstShortBottleneckSignalsParams,
   GetHermesFindingsParams,
   GetHermesJobsParams,
   GetHermesMetricsParams,
   GetHermesRunsParams,
+  GetSignalByAssetParams,
   GetSignalFeedParams,
   GetSignalsParams,
   HealthStatus,
@@ -244,22 +247,41 @@ export function useGetSignals<
 /**
  * @summary Get the latest signal for a specific asset
  */
-export const getGetSignalByAssetUrl = (asset: string) => {
-  return `/api/signals/${asset}`;
+export const getGetSignalByAssetUrl = (
+  asset: string,
+  params?: GetSignalByAssetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/signals/${asset}?${stringifiedParams}`
+    : `/api/signals/${asset}`;
 };
 
 export const getSignalByAsset = async (
   asset: string,
+  params?: GetSignalByAssetParams,
   options?: RequestInit,
 ): Promise<SignalDetail> => {
-  return customFetch<SignalDetail>(getGetSignalByAssetUrl(asset), {
+  return customFetch<SignalDetail>(getGetSignalByAssetUrl(asset, params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetSignalByAssetQueryKey = (asset: string) => {
-  return [`/api/signals/${asset}`] as const;
+export const getGetSignalByAssetQueryKey = (
+  asset: string,
+  params?: GetSignalByAssetParams,
+) => {
+  return [`/api/signals/${asset}`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetSignalByAssetQueryOptions = <
@@ -267,6 +289,7 @@ export const getGetSignalByAssetQueryOptions = <
   TError = ErrorType<unknown>,
 >(
   asset: string,
+  params?: GetSignalByAssetParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getSignalByAsset>>,
@@ -278,11 +301,13 @@ export const getGetSignalByAssetQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetSignalByAssetQueryKey(asset);
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSignalByAssetQueryKey(asset, params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getSignalByAsset>>
-  > = ({ signal }) => getSignalByAsset(asset, { signal, ...requestOptions });
+  > = ({ signal }) =>
+    getSignalByAsset(asset, params, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -310,6 +335,7 @@ export function useGetSignalByAsset<
   TError = ErrorType<unknown>,
 >(
   asset: string,
+  params?: GetSignalByAssetParams,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getSignalByAsset>>,
@@ -319,7 +345,7 @@ export function useGetSignalByAsset<
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetSignalByAssetQueryOptions(asset, options);
+  const queryOptions = getGetSignalByAssetQueryOptions(asset, params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -3372,41 +3398,63 @@ export function useGetPythSnapshotBySymbol<
 
  * @summary SHORT/LONG/WAIT distribution + per-direction approval rates over the last 7 days
  */
-export const getGetDstPipelineHealthUrl = () => {
-  return `/api/dst/pipeline-health`;
+export const getGetDstPipelineHealthUrl = (
+  params?: GetDstPipelineHealthParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dst/pipeline-health?${stringifiedParams}`
+    : `/api/dst/pipeline-health`;
 };
 
 export const getDstPipelineHealth = async (
+  params?: GetDstPipelineHealthParams,
   options?: RequestInit,
 ): Promise<DstPipelineHealth> => {
-  return customFetch<DstPipelineHealth>(getGetDstPipelineHealthUrl(), {
+  return customFetch<DstPipelineHealth>(getGetDstPipelineHealthUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetDstPipelineHealthQueryKey = () => {
-  return [`/api/dst/pipeline-health`] as const;
+export const getGetDstPipelineHealthQueryKey = (
+  params?: GetDstPipelineHealthParams,
+) => {
+  return [`/api/dst/pipeline-health`, ...(params ? [params] : [])] as const;
 };
 
 export const getGetDstPipelineHealthQueryOptions = <
   TData = Awaited<ReturnType<typeof getDstPipelineHealth>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDstPipelineHealth>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetDstPipelineHealthParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDstPipelineHealth>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetDstPipelineHealthQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDstPipelineHealthQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getDstPipelineHealth>>
-  > = ({ signal }) => getDstPipelineHealth({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    getDstPipelineHealth(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getDstPipelineHealth>>,
@@ -3427,15 +3475,18 @@ export type GetDstPipelineHealthQueryError = ErrorType<unknown>;
 export function useGetDstPipelineHealth<
   TData = Awaited<ReturnType<typeof getDstPipelineHealth>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDstPipelineHealth>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetDstPipelineHealthQueryOptions(options);
+>(
+  params?: GetDstPipelineHealthParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDstPipelineHealth>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDstPipelineHealthQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -3449,41 +3500,66 @@ export function useGetDstPipelineHealth<
 
  * @summary SHORT pipeline bottleneck breakdown for the last 7 days
  */
-export const getGetDstShortBottleneckUrl = () => {
-  return `/api/dst/pipeline-health/short-bottleneck`;
+export const getGetDstShortBottleneckUrl = (
+  params?: GetDstShortBottleneckParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dst/pipeline-health/short-bottleneck?${stringifiedParams}`
+    : `/api/dst/pipeline-health/short-bottleneck`;
 };
 
 export const getDstShortBottleneck = async (
+  params?: GetDstShortBottleneckParams,
   options?: RequestInit,
 ): Promise<DstShortBottleneck> => {
-  return customFetch<DstShortBottleneck>(getGetDstShortBottleneckUrl(), {
+  return customFetch<DstShortBottleneck>(getGetDstShortBottleneckUrl(params), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetDstShortBottleneckQueryKey = () => {
-  return [`/api/dst/pipeline-health/short-bottleneck`] as const;
+export const getGetDstShortBottleneckQueryKey = (
+  params?: GetDstShortBottleneckParams,
+) => {
+  return [
+    `/api/dst/pipeline-health/short-bottleneck`,
+    ...(params ? [params] : []),
+  ] as const;
 };
 
 export const getGetDstShortBottleneckQueryOptions = <
   TData = Awaited<ReturnType<typeof getDstShortBottleneck>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDstShortBottleneck>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: GetDstShortBottleneckParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDstShortBottleneck>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getGetDstShortBottleneckQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDstShortBottleneckQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getDstShortBottleneck>>
-  > = ({ signal }) => getDstShortBottleneck({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    getDstShortBottleneck(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getDstShortBottleneck>>,
@@ -3504,15 +3580,18 @@ export type GetDstShortBottleneckQueryError = ErrorType<unknown>;
 export function useGetDstShortBottleneck<
   TData = Awaited<ReturnType<typeof getDstShortBottleneck>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDstShortBottleneck>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetDstShortBottleneckQueryOptions(options);
+>(
+  params?: GetDstShortBottleneckParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDstShortBottleneck>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDstShortBottleneckQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

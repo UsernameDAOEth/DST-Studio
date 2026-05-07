@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.2.0
  */
 
-export type GetSignalsTimeframe =
-  (typeof GetSignalsTimeframe)[keyof typeof GetSignalsTimeframe];
+export type GetDstShortBottleneckTimeframe =
+  (typeof GetDstShortBottleneckTimeframe)[keyof typeof GetDstShortBottleneckTimeframe];
 
-export const GetSignalsTimeframe = {
+export const GetDstShortBottleneckTimeframe = {
   "4H": "4H",
   "15m": "15m",
 } as const;
