@@ -26,11 +26,35 @@ export function getAgentMailStatus(): AgentMailDeliveryStatus {
 }
 
 export function isAgentMailConfigured(): boolean {
-  return Boolean(
-    process.env.AGENTMAIL_API_KEY &&
-    process.env.AGENTMAIL_INBOX_ID &&
-    process.env.AGENTMAIL_TO,
-  );
+  return Boolean(process.env.AGENTMAIL_API_KEY && process.env.AGENTMAIL_TO);
+}
+
+let cachedInboxId: string | null = null;
+
+async function resolveInboxId(apiKey: string): Promise<string> {
+  if (process.env.AGENTMAIL_INBOX_ID) return process.env.AGENTMAIL_INBOX_ID;
+  if (cachedInboxId) return cachedInboxId;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AGENTMAIL_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${AGENTMAIL_BASE_URL}/v0/inboxes`, {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "<no body>");
+      throw new Error(`AgentMail list-inboxes ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = await res.json() as { inboxes?: Array<{ inbox_id?: string; id?: string }> } | Array<{ inbox_id?: string; id?: string }>;
+    const list = Array.isArray(data) ? data : (data.inboxes ?? []);
+    const first = list[0];
+    const id = first?.inbox_id ?? first?.id;
+    if (!id) throw new Error("AgentMail account has no inboxes; set AGENTMAIL_INBOX_ID or create one");
+    cachedInboxId = id;
+    return id;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 interface SignalLike {
@@ -139,11 +163,11 @@ export function formatSignalEmail(signal: SignalLike): FormattedEmail {
 
 export async function sendAgentMailEmail(email: FormattedEmail): Promise<void> {
   const apiKey = process.env.AGENTMAIL_API_KEY;
-  const inboxId = process.env.AGENTMAIL_INBOX_ID;
   const to = process.env.AGENTMAIL_TO;
-  if (!apiKey || !inboxId || !to) {
-    throw new Error("AGENTMAIL_API_KEY, AGENTMAIL_INBOX_ID, AGENTMAIL_TO must be set");
+  if (!apiKey || !to) {
+    throw new Error("AGENTMAIL_API_KEY and AGENTMAIL_TO must be set");
   }
+  const inboxId = await resolveInboxId(apiKey);
   const url = `${AGENTMAIL_BASE_URL}/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), AGENTMAIL_TIMEOUT_MS);
@@ -189,7 +213,7 @@ export async function maybeDeliverApprovedSignalEmail(signal: SignalLike): Promi
     return { delivered: false, reason: "Email routing disabled in Hermes constraints" };
   }
   if (!isAgentMailConfigured()) {
-    return { delivered: false, reason: "AGENTMAIL_API_KEY / AGENTMAIL_INBOX_ID / AGENTMAIL_TO not configured" };
+    return { delivered: false, reason: "AGENTMAIL_API_KEY / AGENTMAIL_TO not configured" };
   }
   const key = dedupKey(signal);
   if (deliveredKeys.has(key)) {

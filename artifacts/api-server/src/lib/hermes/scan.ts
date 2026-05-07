@@ -130,7 +130,7 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
 
       if (constraints.alertRouting.email) {
         if (!isAgentMailConfigured()) {
-          reports.push({ channel: "Email", status: "SKIPPED", detail: "AGENTMAIL_API_KEY/AGENTMAIL_INBOX_ID/AGENTMAIL_TO missing" });
+          reports.push({ channel: "Email", status: "SKIPPED", detail: "AGENTMAIL_API_KEY/AGENTMAIL_TO missing" });
         } else {
           const out = await maybeDeliverApprovedSignalEmail(persistedSignal!);
           if (out.delivered) reports.push({ channel: "Email", status: "COMPLETE", detail: "delivered" });

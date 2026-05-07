@@ -305,7 +305,7 @@ export default function Integrations() {
                     )}
                     {!integration.configured && integration.name === "agentmail" && (
                       <div className="text-[10px] font-mono text-[hsl(var(--trade-wait))]">
-                        Set AGENTMAIL_API_KEY, AGENTMAIL_INBOX_ID, AGENTMAIL_TO to activate.
+                        Set AGENTMAIL_API_KEY and AGENTMAIL_TO to activate.
                       </div>
                     )}
                   </div>
