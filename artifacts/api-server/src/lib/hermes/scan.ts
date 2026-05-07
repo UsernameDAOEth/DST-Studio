@@ -1,7 +1,9 @@
 import { HermesJob, HermesJobPhase, HermesScanStatus, HermesScanResult } from "./types";
 import { computeSignal } from "../dst/signalEngine";
+import { persistSignal } from "../dst/persistSignal";
 import { getConstraints } from "./constraints";
 import { logger } from "../logger";
+import { isTelegramConfigured, maybeDeliverApprovedSignal } from "../integrations/telegram";
 
 let recentJobs: HermesJob[] = [];
 let totalScansToday = 0;
@@ -56,6 +58,7 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
     const pDefi = job.phases.find(p => p.stage === "DEFILAMMA")!;
     pDefi.status = "RUNNING";
     let signal;
+    let persistedSignal: Awaited<ReturnType<typeof persistSignal>> | null = null;
     try {
       signal = await computeSignal(job.asset, constraints.activeTimeframe);
       pDefi.status = "COMPLETE";
@@ -65,6 +68,14 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
       pDefi.result = "Error computing signal";
     }
     pDefi.durationMs = Date.now() - start;
+
+    if (signal) {
+      try {
+        persistedSignal = await persistSignal(signal);
+      } catch (err) {
+        logger.error({ err, asset: job.asset }, "Persist signal failed in Hermes scan");
+      }
+    }
 
     const pPyth = job.phases.find(p => p.stage === "PYTH")!;
     if (constraints.pythConfidenceFilter) {
@@ -92,10 +103,38 @@ export async function triggerScan(assets: string[]): Promise<HermesScanResult> {
     pAudit.durationMs = 0;
 
     const pRouting = job.phases.find(p => p.stage === "ROUTING")!;
+    const routingStart = Date.now();
     const hasRouting = Object.values(constraints.alertRouting).some(v => v);
-    pRouting.status = "SKIPPED";
-    pRouting.skippedReason = hasRouting ? "Routing not yet implemented" : "No alert routing configured";
-    pRouting.durationMs = 0;
+    const isApproved = persistedSignal && persistedSignal.verdictDjzs === "PASS" && persistedSignal.direction !== "WAIT";
+    if (!isApproved) {
+      pRouting.status = "SKIPPED";
+      pRouting.skippedReason = hasRouting
+        ? "No APPROVED tradeable signal to route"
+        : "No alert routing configured";
+    } else if (constraints.alertRouting.telegram) {
+      if (!isTelegramConfigured()) {
+        pRouting.status = "SKIPPED";
+        pRouting.skippedReason = "Telegram routing enabled but TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID missing";
+      } else {
+        const outcome = await maybeDeliverApprovedSignal(persistedSignal!);
+        if (outcome.delivered) {
+          pRouting.status = "COMPLETE";
+          pRouting.result = `Telegram delivered (signal ${persistedSignal!.id})`;
+        } else if (outcome.reason.startsWith("Signal ") && outcome.reason.includes("already delivered")) {
+          pRouting.status = "SKIPPED";
+          pRouting.skippedReason = outcome.reason;
+        } else {
+          pRouting.status = "FAILED";
+          pRouting.result = `Telegram delivery failed: ${outcome.reason}`;
+        }
+      }
+    } else {
+      pRouting.status = "SKIPPED";
+      pRouting.skippedReason = hasRouting
+        ? "No live channels enabled (XMTP/Discord scaffolded only)"
+        : "No alert routing configured";
+    }
+    pRouting.durationMs = Date.now() - routingStart;
 
     job.scanCompletedAt = new Date().toISOString();
 

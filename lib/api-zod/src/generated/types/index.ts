@@ -89,6 +89,7 @@ export * from "./hermesWorkerRole";
 export * from "./hermesWorkerStatus";
 export * from "./integrationStatus";
 export * from "./integrationStatusCategory";
+export * from "./integrationStatusDeliveryStatus";
 export * from "./integrationStatusStatus";
 export * from "./lazerFeedTick";
 export * from "./lazerSnapshot";

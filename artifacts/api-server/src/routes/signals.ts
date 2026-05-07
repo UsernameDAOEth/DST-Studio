@@ -3,6 +3,9 @@ import { db } from "@workspace/db";
 import { signalsTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import { computeSignal } from "../lib/dst/signalEngine";
+import { persistSignal } from "../lib/dst/persistSignal";
+import { maybeDeliverApprovedSignal } from "../lib/integrations/telegram";
+import { logger } from "../lib/logger";
 import {
   GetSignalsQueryParams,
   GetSignalByAssetParams,
@@ -27,41 +30,11 @@ async function getOrComputeSignal(asset: string) {
   }
 
   const signal = await computeSignal(asset);
-  const [inserted] = await db
-    .insert(signalsTable)
-    .values({
-      asset: signal.asset,
-      timeframe: signal.timeframe,
-      direction: signal.direction,
-      confidence: String(signal.confidence),
-      verdictDjzs: signal.verdictDjzs,
-      entryZoneLow: String(signal.entryZoneLow),
-      entryZoneHigh: String(signal.entryZoneHigh),
-      targetZone: String(signal.targetZone),
-      invalidationPrice: String(signal.invalidationPrice),
-      reasonCodes: signal.reasonCodes,
-      processVerdict: signal.processVerdict,
-      logicAdmissibility: signal.logicAdmissibility,
-      setupFamily: signal.setupFamily,
-      entryQuality: signal.entryQuality,
-      narrativeRisk: signal.narrativeRisk,
-      rrRatio: String(signal.rrRatio),
-      thesis: signal.thesis,
-      whyTrade: signal.whyTrade,
-      rejectIf: signal.rejectIf,
-      rejectionCodes: signal.rejectionCodes,
-      processQualityGrade: signal.processQualityGrade,
-      preTradChecklist: signal.preTradChecklist as unknown as Record<string, unknown>,
-      outcomeTracking: signal.outcomeTracking as unknown as Record<string, unknown>,
-      marketSnapshot: signal.marketSnapshot as unknown as Record<string, unknown>,
-      trendRegime: signal.trendRegime as unknown as Record<string, unknown>,
-      openInterestContext: signal.openInterestContext as unknown as Record<string, unknown>,
-      auditReport: signal.auditReport as unknown as Record<string, unknown>,
-      dataQuality: signal.dataQuality as unknown as Record<string, unknown>,
-      verificationReport: signal.verificationReport as unknown as Record<string, unknown>,
-      packetHash: signal.packetHash,
-    })
-    .returning();
+  const inserted = await persistSignal(signal);
+  // Best-effort delivery — non-blocking for the HTTP request path
+  void maybeDeliverApprovedSignal(inserted).catch((err) => {
+    logger.error({ err, signalId: inserted.id }, "Unhandled error in maybeDeliverApprovedSignal");
+  });
   return inserted;
 }
 

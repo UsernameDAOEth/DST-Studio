@@ -1,4 +1,5 @@
 import { IntegrationStatus } from "@workspace/api-zod";
+import { isTelegramConfigured, getTelegramStatus } from "./telegram";
 
 export const INTEGRATIONS = [
   {
@@ -90,21 +91,40 @@ export const INTEGRATIONS = [
 // In-memory toggle store
 const enabledStore: Record<string, boolean> = {};
 
+function decorate(integration: typeof INTEGRATIONS[number]) {
+  let configured = integration.configured;
+  let enabled = enabledStore[integration.name] ?? false;
+  let deliveryStatus: ReturnType<typeof getTelegramStatus> | undefined;
+
+  if (integration.name === "telegram") {
+    configured = isTelegramConfigured();
+    // Auto-enable telegram when fully configured so toggle reflects reality
+    if (configured && enabledStore[integration.name] === undefined) {
+      enabled = true;
+    }
+    deliveryStatus = getTelegramStatus();
+  }
+
+  return {
+    ...integration,
+    configured,
+    enabled,
+    status: (enabled && configured
+      ? "ACTIVE"
+      : configured
+        ? "DISABLED"
+        : "NOT_CONFIGURED") as any,
+    ...(deliveryStatus ? { deliveryStatus } : {}),
+  };
+}
+
 export function getIntegrations() {
-  return INTEGRATIONS.map((i) => ({
-    ...i,
-    enabled: enabledStore[i.name] ?? false,
-    status: (enabledStore[i.name] ? "ACTIVE" : (i.configured ? "DISABLED" : "NOT_CONFIGURED")) as any,
-  }));
+  return INTEGRATIONS.map(decorate);
 }
 
 export function toggleIntegration(name: string) {
   const integration = INTEGRATIONS.find((i) => i.name === name);
   if (!integration) return null;
   enabledStore[name] = !(enabledStore[name] ?? false);
-  return {
-    ...integration,
-    enabled: enabledStore[name],
-    status: (enabledStore[name] ? "ACTIVE" : (integration.configured ? "DISABLED" : "NOT_CONFIGURED")) as any,
-  };
+  return decorate(integration);
 }

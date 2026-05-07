@@ -1109,6 +1109,18 @@ export const GetIntegrationsResponseItem = zod
       .describe(
         'Which expansion phase this integration belongs to (e.g. \"Phase 2\")',
       ),
+    deliveryStatus: zod
+      .object({
+        lastSuccessAt: zod.coerce.date().nullable(),
+        lastErrorAt: zod.coerce.date().nullable(),
+        lastError: zod.string().nullable(),
+        totalDeliveries: zod.number(),
+        totalErrors: zod.number(),
+      })
+      .nullish()
+      .describe(
+        "Live delivery telemetry for routing integrations (currently Telegram only)",
+      ),
   })
   .describe(
     "Scaffold entry for a planned system integration. All integrations are off by default until configured and enabled.\n",
@@ -1149,6 +1161,18 @@ export const ToggleIntegrationResponse = zod
       .describe(
         'Which expansion phase this integration belongs to (e.g. \"Phase 2\")',
       ),
+    deliveryStatus: zod
+      .object({
+        lastSuccessAt: zod.coerce.date().nullable(),
+        lastErrorAt: zod.coerce.date().nullable(),
+        lastError: zod.string().nullable(),
+        totalDeliveries: zod.number(),
+        totalErrors: zod.number(),
+      })
+      .nullish()
+      .describe(
+        "Live delivery telemetry for routing integrations (currently Telegram only)",
+      ),
   })
   .describe(
     "Scaffold entry for a planned system integration. All integrations are off by default until configured and enabled.\n",
@@ -1187,6 +1211,18 @@ export const GetIntegrationByNameResponse = zod
       .string()
       .describe(
         'Which expansion phase this integration belongs to (e.g. \"Phase 2\")',
+      ),
+    deliveryStatus: zod
+      .object({
+        lastSuccessAt: zod.coerce.date().nullable(),
+        lastErrorAt: zod.coerce.date().nullable(),
+        lastError: zod.string().nullable(),
+        totalDeliveries: zod.number(),
+        totalErrors: zod.number(),
+      })
+      .nullish()
+      .describe(
+        "Live delivery telemetry for routing integrations (currently Telegram only)",
       ),
   })
   .describe(

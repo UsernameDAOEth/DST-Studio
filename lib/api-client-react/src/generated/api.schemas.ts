@@ -1003,6 +1003,17 @@ export const IntegrationStatusStatus = {
 } as const;
 
 /**
+ * Live delivery telemetry for routing integrations (currently Telegram only)
+ */
+export type IntegrationStatusDeliveryStatus = {
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+  totalDeliveries: number;
+  totalErrors: number;
+} | null;
+
+/**
  * Scaffold entry for a planned system integration. All integrations are off by default until configured and enabled.
 
  */
@@ -1021,6 +1032,8 @@ export interface IntegrationStatus {
   docsUrl?: string | null;
   /** Which expansion phase this integration belongs to (e.g. "Phase 2") */
   phase: string;
+  /** Live delivery telemetry for routing integrations (currently Telegram only) */
+  deliveryStatus?: IntegrationStatusDeliveryStatus;
 }
 
 /**

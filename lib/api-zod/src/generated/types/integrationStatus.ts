@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.2.0
  */
 import type { IntegrationStatusCategory } from "./integrationStatusCategory";
+import type { IntegrationStatusDeliveryStatus } from "./integrationStatusDeliveryStatus";
 import type { IntegrationStatusStatus } from "./integrationStatusStatus";
 
 /**
@@ -27,4 +28,6 @@ export interface IntegrationStatus {
   docsUrl?: string | null;
   /** Which expansion phase this integration belongs to (e.g. "Phase 2") */
   phase: string;
+  /** Live delivery telemetry for routing integrations (currently Telegram only) */
+  deliveryStatus?: IntegrationStatusDeliveryStatus;
 }

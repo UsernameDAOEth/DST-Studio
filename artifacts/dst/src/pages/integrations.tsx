@@ -272,6 +272,40 @@ export default function Integrations() {
                   </div>
                 )}
 
+                {integration.name === "telegram" && integration.deliveryStatus && (
+                  <div className="p-3 bg-secondary/50 border border-border rounded-none space-y-1.5">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Delivery Telemetry</div>
+                    <div className="flex justify-between text-[10px] font-mono">
+                      <span className="text-muted-foreground">DELIVERED</span>
+                      <span className="text-primary">{integration.deliveryStatus.totalDeliveries}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-mono">
+                      <span className="text-muted-foreground">ERRORS</span>
+                      <span className={integration.deliveryStatus.totalErrors > 0 ? "text-destructive" : "text-muted-foreground/60"}>
+                        {integration.deliveryStatus.totalErrors}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-mono">
+                      <span className="text-muted-foreground">LAST OK</span>
+                      <span className="text-foreground">
+                        {integration.deliveryStatus.lastSuccessAt
+                          ? new Date(integration.deliveryStatus.lastSuccessAt).toLocaleTimeString()
+                          : "—"}
+                      </span>
+                    </div>
+                    {integration.deliveryStatus.lastError && (
+                      <div className="text-[10px] font-mono text-destructive break-all">
+                        ERR: {integration.deliveryStatus.lastError}
+                      </div>
+                    )}
+                    {!integration.configured && (
+                      <div className="text-[10px] font-mono text-[hsl(var(--trade-wait))]">
+                        Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to activate.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-2 pt-2">
                   {integration.envKeyRequired && (
                     <div className="text-xs font-mono text-destructive/80">

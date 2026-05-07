@@ -1594,6 +1594,32 @@ components:
         phase:
           type: string
           description: Which expansion phase this integration belongs to (e.g. "Phase 2")
+        deliveryStatus:
+          type: object
+          nullable: true
+          description: Live delivery telemetry for routing integrations (currently Telegram only)
+          properties:
+            lastSuccessAt:
+              type: string
+              nullable: true
+              format: date-time
+            lastErrorAt:
+              type: string
+              nullable: true
+              format: date-time
+            lastError:
+              type: string
+              nullable: true
+            totalDeliveries:
+              type: integer
+            totalErrors:
+              type: integer
+          required:
+            - lastSuccessAt
+            - lastErrorAt
+            - lastError
+            - totalDeliveries
+            - totalErrors
       required:
         - name
         - displayName
