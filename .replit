@@ -3,6 +3,8 @@ modules = ["nodejs-24", "postgresql-16", "python-3.11"]
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+build = ["sh", "-c", "corepack enable && pnpm install --frozen-lockfile && PORT=${PORT:-8080} BASE_PATH=/ pnpm run build"]
+run = ["sh", "-c", "pnpm --filter @workspace/api-server run start"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
