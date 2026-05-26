@@ -12,6 +12,7 @@ import hermesRouter from "./hermes";
 import pythRouter from "./pyth";
 import lazerRouter from "./lazer";
 import dstRouter from "./dst";
+import mediaScoutRouter from "./mediaScout";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use("/hermes", hermesRouter);
 router.use("/pyth", pythRouter);
 router.use("/lazer", lazerRouter);
 router.use("/dst", dstRouter);
+router.use("/media-scout", mediaScoutRouter);
 
 export default router;
